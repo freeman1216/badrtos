@@ -18,6 +18,7 @@
  *    priorities 2-14
  */
 #pragma once
+#include <stdint.h>
 #ifndef BAD_RTOS_CORE
 #define BAD_RTOS_CORE
 
@@ -51,8 +52,8 @@
 #endif
 
 // asm helpers implemented in the asm portion of this file grep for "ASM stuff" to find it
-extern uint32_t __modify_basepri(uint32_t basepri);
-extern void __restore_basepri(uint32_t basepri);
+static inline uint32_t __attribute__((always_inline)) __modify_basepri(uint32_t basepri);
+static inline void __attribute__((always_inline)) __restore_basepri(uint32_t basepri);
 // critical section helpers using basepri 
 #define CONTEX_SWITCH_BARIER_STORE uint32_t context_basepri = 0;
 #define CONTEX_SWITCH_BARIER context_basepri = __modify_basepri(15<<4)
@@ -148,7 +149,7 @@ typedef struct bad_tcb{
     struct bad_tcb* delayq_next;
     bad_rtos_delayq_misc_t delayq_misc;
     uint32_t ticks_to_change;   
-    uint32_t counter;
+    volatile uint32_t counter;
 }bad_tcb_t;
 
 typedef void (*cbptr)(struct bad_tcb* tcb,void * par); 
@@ -179,15 +180,14 @@ typedef struct bad_mutex{
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
 typedef struct bad_sem{
-    uint32_t counter;
-    uint32_t count;
+    uint16_t counter;
+    uint16_t count;
     bad_tcb_t* blockedq;
 } bad_sem_t ;
 
 typedef struct bad_nbsem{
-    uint32_t counter;
+    volatile uint32_t counter;
     uint32_t count;
-    
 } bad_nbsem_t ;
 
 #endif
@@ -200,7 +200,7 @@ typedef struct {
 
 typedef struct {
     bad_msg_block_t* msgs;
-    uint32_t head;
+    volatile uint32_t head;
     uint32_t tail;
     uint32_t capacity;
 } bad_msgq_t;
@@ -515,7 +515,7 @@ extern bad_rtos_status_t mutex_delete(bad_mutex_t* mut);
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore ptr is null or count is 0
  */
-extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint32_t count);
+extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t count);
 /**
  * \b sem_take
  *
@@ -812,9 +812,9 @@ extern void* user_alloc(uint32_t size);
 #ifdef BAD_RTOS_IMPLEMENTATION
 
 typedef struct kernel_cb {
-    bad_tcb_t* readyq;
-    bad_tcb_t* blockedq;
-    bad_tcb_t* delayq;
+    bad_tcb_t * readyq;
+    bad_tcb_t * blockedq;
+    bad_tcb_t * volatile delayq;
     uint8_t is_running;
 }bad_kernel_cb_t;
 
@@ -830,11 +830,11 @@ typedef enum {
     BAD_SYSTICK_BOTH = BAD_SYSTICK_DELAY_WAKE_PENDING|BAD_SYSTICK_TIMEFRAME_PENDING//0x3
 }BAD_SYSTICK_STATUS;
 
-bad_tcb_t __attribute__((section(".kernel_bss"))) *curr ;
-bad_tcb_t __attribute__((section(".kernel_bss"))) *next;
+bad_tcb_t __attribute__((section(".kernel_bss"),used)) * volatile curr;
+bad_tcb_t __attribute__((section(".kernel_bss"),used)) * volatile next;
 
 static bad_kernel_cb_t __attribute__((section(".kernel_bss"))) kernel_cb;
-static uint32_t __attribute__((section(".kernel_bss")))ticks;
+static volatile uint32_t __attribute__((section(".kernel_bss")))ticks;
 
 static tcb_bitmask_slab_t __attribute__((section(".kernel_bss"))) tcbslab;
 
@@ -911,11 +911,11 @@ TASK_STATIC_STACK(idle, IDLE_TASK_STACK_SIZE)
 extern void idle_task();
 extern void __first_task_start();
 extern void __sched_update_systick(BAD_SYSTICK_STATUS status);
-extern uint32_t __ldrex(void*);
-extern uint32_t __strex(uint32_t val,void*);
-extern void __clrex();
-extern void __set_control(uint32_t control);
-extern uint32_t __get_control();
+static inline uint32_t __attribute__((always_inline)) __ldrex(volatile uint32_t* addr);
+static inline uint32_t  __attribute__((always_inline)) __strex(uint32_t val,volatile uint32_t* addr);
+static inline void  __attribute__((always_inline)) __clrex();
+static inline void __attribute__((always_inline)) __set_control(uint32_t control);
+static inline uint32_t __attribute__((always_inline)) __get_control();
 extern void __init_second_stage();
 
 #ifdef BAD_RTOS_USE_MPU
@@ -2041,7 +2041,7 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t* mut){
 
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-bad_rtos_status_t sem_init(bad_sem_t* sem,uint32_t count){
+bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t count){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!sem || !count){
@@ -2447,6 +2447,7 @@ __asm__(
     "str r0,[r2]        \n"
     "msr psp,r0         \n"
     "bx lr              \n"
+    ".ltorg             \n"
 );
 
 //first task second stage init
@@ -2464,66 +2465,60 @@ __asm__(
     "msr psp, r0                \n"
     "mov lr, #0xFFFFFFFD        \n"
     "bx lr                      \n"
+    ".ltorg                     \n"
 );
 //helpers for specific common operations
 
-__asm__(
-".thumb_func        \n"
-".global __ldrex    \n"
-"__ldrex:           \n"
-    "ldrex r0,[r0]  \n"
-    "bx lr          \n"
-);
+static inline __attribute__((always_inline)) uint32_t __ldrex(volatile uint32_t* addr){
+    uint32_t res;
+    __asm__ volatile ("ldrex %0, %1" : "=r"(res): "Q"(*addr): "memory");
+    return res;
+}
 
-__asm__(
-".thumb_func            \n"
-".global __strex        \n"
-"__strex:               \n"
-    "strex r0,r0,[r1]   \n"
-    "bx lr              \n"
-);
-__asm__(
-".thumb_func            \n"
-".global __clrex        \n"
-"__clrex:               \n"
-    "clrex              \n"
-    "bx lr              \n"
-);
+static inline __attribute__((always_inline)) uint32_t __strex(uint32_t val,volatile uint32_t * addr){
+    uint32_t res;
+    __asm__ volatile ("strex %0, %2, %1" : "=&r" (res), "=Q" (*addr) : "r" (val));    
+    return res;
+}
 
-__asm__(
-".thumb_func                \n"
-".global __modify_basepri   \n"
-"__modify_basepri:          \n"
-    "mov r1,r0              \n" 
-    "mrs r0, basepri        \n"
-    "msr basepri,r1         \n"
-    "isb                    \n"
-    "bx lr                  \n"
-);
+static inline __attribute__((always_inline)) void __clrex(){
+    __asm__ volatile ("clrex":::"memory");
+}
 
-__asm__(
-".thumb_func                \n"
-".global __restore_basepri  \n"
-"__restore_basepri:         \n"
-    "msr basepri,r0         \n"
-    "isb                    \n"
-    "bx lr                  \n"
-);
+static inline __attribute__((always_inline)) uint32_t __modify_basepri(uint32_t new_basepri)
+{
+  uint32_t old_basepri;
+  __asm__ volatile (
+        "mrs %0, basepri    \n"     
+        "msr basepri, %1    \n"  
+        "isb                \n"
+        : "=&r" (old_basepri)
+        : "r"   (new_basepri)
+        : "memory"
+  );
+  return old_basepri;
+}
 
-__asm__(
-".thumb_func            \n"
-".global __set_control  \n"
-"__set_control:         \n"
-    "msr control, r0    \n"
-    "bx lr              \n"
-);
-__asm__(
-".thumb_func            \n"
-".global __get_control  \n"
-"__get_control:         \n"
-    "mrs r0, control    \n"
-    "bx lr              \n"
-);
+static inline __attribute__((always_inline)) void __restore_basepri(uint32_t new_basepri){
+    __asm__ volatile(
+        "msr basepri, %0    \n"
+        "isb                \n"
+        : : "r"(new_basepri)
+        : "memory"
+    );
+}
+static inline __attribute__((always_inline)) void __set_control(uint32_t new_control){
+    __asm__ volatile(
+            "msr control, %0    \n"
+            "isb                \n"
+            : : "r"(new_control)); 
+}
+static inline __attribute__((always_inline)) uint32_t __get_control(){
+    uint32_t res;
+    __asm__ volatile("mrs %0, control":"=r"(res));
+    return res;
+}
+
 /**
  * \b svc_c
  *
@@ -2534,7 +2529,7 @@ __asm__(
  *
  */
 
-void svc_c(uint8_t svc, uint32_t* stack){
+static void __attribute__((used)) svc_c(uint8_t svc, uint32_t* stack){
     switch (svc) {
         //start first task
         case 0x4:{
@@ -2658,16 +2653,13 @@ void systick_usr(){
         goto delayq_update;
     }
 
-    curr->counter--;
-    
-    if(!curr->counter){
+    if(!--curr->counter){
         status |= BAD_SYSTICK_TIMEFRAME_PENDING;
     }
 
 delayq_update:
     if(kernel_cb.delayq){
-        kernel_cb.delayq->counter--;
-        if(!kernel_cb.delayq->counter){
+        if(!--kernel_cb.delayq->counter){
             status|= BAD_SYSTICK_DELAY_WAKE_PENDING;
         }
 

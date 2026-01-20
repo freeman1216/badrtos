@@ -31,9 +31,7 @@
 #define BAD_GB_AHB1_PERIPEHRALS    (RCC_AHB1_GPIOA|RCC_AHB1_DMA2|RCC_AHB1_GPIOB)
 #define BAD_GB_APB2_PERIPHERALS    (RCC_APB2_USART1|RCC_APB2_SPI1|RCC_APB2_SYSCFGEN)
 
-extern uint32_t __ldrex(void*);
-extern uint32_t __strex(uint32_t val,void*);
-extern void __clrex();
+
 static inline void __main_clock_setup(){
     rcc_enable_hse();
     rcc_pll_setup( PLLP4, BADHAL_PLLM, BADHAL_PLLN, BADHAL_PLLQ, PLL_SOURCE_HSE);

@@ -49,7 +49,6 @@ bad_rtos_start();
 ## Notes
  - bad_rtos_start() can only be called in the translation unit where implementation was included
  - API is written with static and or zero initilisation in mind, no need to call stuff_init on everything, read the comments for more information
- - Lacks "volatile" compiler protection for now, so be aware of compiler optimisiations
  - If mpu is not used you can easily remove linker file and startup code dependencies by removing section attributes from definitions and adding attribute aligned(8) to stactic stacks macro and heaps and replace my headers with the CMIS one
 
 

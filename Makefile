@@ -1,6 +1,6 @@
 CC = arm-none-eabi-gcc
 AS = arm-none-eabi-as
-CFLAGS = -ggdb -Wall -Wextra -fjump-tables -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
+CFLAGS = -ggdb -O2 -Wall -Wextra  -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
 LDFLAGS = -Tstm32f411ceu6.ld -nolibc --specs=nosys.specs -nostartfiles  
 INCLUDES = -Iinc/ -Iinc/driver/ -Iinc/rtos
 
@@ -9,8 +9,6 @@ BUILD_DIR = build
 
 SOURCES = $(SRC_DIR)/startup_stm32f411ceu6.c 
 
-MAIN_SRC = $(SOURCES) $(SRC_DIR)/main.c
-MAIN_BIN = $(BUILD_DIR)/badrtos.elf
 
 MAIN_SRC = $(SOURCES) $(SRC_DIR)/main.c
 TIME_FRAME_SRC = $(SOURCES) tests/time_frame.c

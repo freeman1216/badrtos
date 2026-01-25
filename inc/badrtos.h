@@ -201,7 +201,7 @@ typedef struct {
 typedef struct {
     bad_msg_block_t* msgs;
     volatile uint32_t head;
-    uint32_t tail;
+    volatile uint32_t tail;
     uint32_t capacity;
 } bad_msgq_t;
 
@@ -1003,6 +1003,9 @@ bad_rtos_status_t msgq_init(bad_msgq_t* q ,uint32_t size, void* (* alloc_func)(u
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_ALLOC_FAIL;
     }
+
+    OPT_BARRIER;
+
     q->head = q->tail = 0;
     q->capacity = size;
     
@@ -1019,6 +1022,9 @@ bad_rtos_status_t msgq_deinit(bad_msgq_t *q,void(* free_func)(void* block,uint32
     }
     uint32_t cap = q->capacity;
     q->capacity = 0;
+    
+    OPT_BARRIER;
+    
     free_func(q->msgs,cap);
     q->head = 0;
     q->tail = 0;
@@ -1043,7 +1049,10 @@ bad_queue_status_t msgq_pull_msg(bad_msgq_t* q, bad_msg_block_t* writeback ){
         return BAD_QUEUE_EMPTY;
     }
     *writeback = *(q->msgs+q->tail);
-    q->tail = (q->tail+1) & (q->capacity-1);;
+    
+    OPT_BARRIER;
+    
+    q->tail = (q->tail+1) & (q->capacity-1);
 
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_QUEUE_OK;

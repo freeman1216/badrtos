@@ -1,3 +1,4 @@
+#include <stdint.h>
 #define BAD_USART_IMPLEMENTATION
 #define BAD_FLASH_IMPLEMENTATION
 #define BAD_RCC_IMPLEMENTATION
@@ -16,7 +17,6 @@
 #define UART1_TX_AF             (7)
 #define UART1_RX_AF             (7)
 
-
     // HSE  = 25
     // PLLM = 25
     // PLLN = 400
@@ -28,9 +28,8 @@
 #define BADHAL_PLLQ (10)
 #define BADHAL_FLASH_LATENCY (FLASH_LATENCY_3ws)
 
-#define BAD_GB_AHB1_PERIPEHRALS    (RCC_AHB1_GPIOA|RCC_AHB1_DMA2|RCC_AHB1_GPIOB)
-#define BAD_GB_APB2_PERIPHERALS    (RCC_APB2_USART1|RCC_APB2_SPI1)
-
+#define BAD_RTOS_AHB1_PERIPEHRALS    (RCC_AHB1_GPIOA|RCC_AHB1_DMA2|RCC_AHB1_GPIOB)
+#define BAD_RTOS_APB2_PERIPHERALS    (RCC_APB2_USART1|RCC_APB2_SPI1|RCC_APB2_SYSCFGEN|RCC_APB2_TIM10)
 
 static inline void __main_clock_setup(){
     rcc_enable_hse();
@@ -42,12 +41,11 @@ static inline void __main_clock_setup(){
 
 
 static inline void __periph_setup(){
-    rcc_set_ahb1_clocking(BAD_GB_AHB1_PERIPEHRALS);
+    rcc_set_ahb1_clocking(BAD_RTOS_AHB1_PERIPEHRALS);
     io_setup_pin(UART_GPIO_PORT, UART1_TX_PIN, MODER_af, UART1_TX_AF, OSPEEDR_high_speed, PUPDR_no_pull, OTYPR_push_pull);
     io_setup_pin(UART_GPIO_PORT, UART1_RX_PIN, MODER_af, UART1_RX_AF, OSPEEDR_high_speed, PUPDR_no_pull, OTYPR_push_pull);
-    rcc_set_apb2_clocking(BAD_GB_APB2_PERIPHERALS);
+    rcc_set_apb2_clocking(BAD_RTOS_APB2_PERIPHERALS);
 }
-
 
 
 START_TASK_MPU_REGIONS_DEFINITIONS(task1)
@@ -56,28 +54,38 @@ END_TASK_MPU_REGIONS(task1)
 
 bad_tcb_t* task1tcb;
 bad_tcb_t* task2tcb;
-bad_sem_t sem;
-bad_nbsem_t nbsem;
-
-void cb(bad_tcb_t* tcb, void* par){
-    (void)tcb;
-    (void) par;
-    while(1);
-}
+uint32_t callback_hit;
+uint32_t unblocked;
+void cb(bad_tcb_t* unused0, void* unused1){
+    UNUSED(unused0);
+    UNUSED(unused1);
+    callback_hit++;
+} 
 void task1(){
     while (1) {
-
+        task_delay(200, cb, 0);
+        uint32_t *arr = user_alloc(16);
+        task_block();
+        user_free(arr,16);
     }
 }
 
 void task2(){
     while (1) {
-
+        bad_rtos_status_t status;
+        status = task_unblock(task1tcb);
+        if(status == BAD_RTOS_STATUS_OK){
+            unblocked++;
+            task_yield();
+        }else{
+            task_delay(200, 0, 0);
+        }
     }
 }
 
-#define TASK1_PRIORITY 0 
-#define TASK2_PRIORITY 0
+
+#define TASK1_PRIORITY 1 
+#define TASK2_PRIORITY 1
 #define TASK2_STACK_SIZE 1024
 #define TASK1_STACK_SIZE 1024
 TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
@@ -90,7 +98,7 @@ void bad_user_setup(){
         .regions = task1_regions,
         .region_count = MPU_REGIONS_SIZE(task1),
         .ticks_to_change = 500,
-        .base_priority = TASK2_PRIORITY
+        .base_priority = TASK1_PRIORITY
     };
     task1tcb = task_make(&task1_descr);
     bad_task_descr_t task2_descr = {
@@ -108,7 +116,6 @@ int __attribute__((noinline)) main(){
     __DISABLE_INTERUPTS;
     __main_clock_setup();
     __periph_setup();
-   
     __ENABLE_INTERUPTS;
     bad_rtos_start();
     //task_yield();

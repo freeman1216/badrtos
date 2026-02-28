@@ -121,8 +121,6 @@ static inline void ramfunc_init(){
     }
 }
 
-;
-
 static inline void constructors_init(){
     constructor_ptr* constructors = __init_array;
     while (constructors < __einit_array) {
@@ -131,16 +129,15 @@ static inline void constructors_init(){
     }
 }
 
-
-
-void isr_reset(){
+void __attribute__((noreturn)) isr_reset(){
     data_init();
     bss_init();
     ramfunc_init();
     constructors_init();
     main();
     while(1);
-};
+}
+
 #define IVT_SIZE (102U)
 typedef void (*isr_addr_t) (void);
 

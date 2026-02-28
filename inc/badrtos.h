@@ -118,9 +118,9 @@ typedef void (*taskptr)(void * par) ;
 typedef struct bad_tcb{
     // stack pointer, doesnt really reflect the actual one when running, actual one is + 32
     // (due to registers stacked by hardware), used only to save it for a context switch     
-    uint32_t* sp;
+    uint32_t * volatile sp;
     //stack base
-    uint32_t* stack;
+    uint32_t *stack;
     uint32_t stack_size;
     taskptr entry;
     //callback for delays
@@ -511,11 +511,13 @@ extern bad_rtos_status_t mutex_delete(bad_mutex_t* mut);
  *
  * This function can be called from interrupt context. But is not reentrant if the object parameter is the same
  * @param[in] bad_sem_t* Ptr to semaphore object to initialise
+ * @param[in] uint16_t Value to initialise semaphore counter with
+ * @param[in] uint16_t Value cap of the semaphore
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore ptr is null or count is 0
  */
-extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t count);
+extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value,uint16_t count);
 /**
  * \b sem_take
  *
@@ -596,11 +598,13 @@ extern bad_rtos_status_t sem_delete(bad_sem_t* sem);
  *
  * This function can be called from interrupt context. But is not reentrant if the object parameter is the same
  * @param[in] bad_sem_t* Ptr to semaphore object to initialise
+ * @param[in] uint32_t Value to initialise semaphore with
+ * @param[in] uint32_t Value cap of the semaphore
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS nbsemaphore ptr is null or count is 0
  */
-extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem,uint32_t count);
+extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem, uint32_t reset_value, uint32_t count);
 /**
  * \b nbsem_take
  *
@@ -773,7 +777,7 @@ extern void* kernel_alloc(uint32_t size);
  * @param[in] uint32_t size in bytes 
  * 
  */
-extern void kernel_free(void*,uint32_t size);
+extern void kernel_free(void* block,uint32_t size);
 #endif
 
 #if defined (BAD_RTOS_USE_UHEAP)
@@ -785,27 +789,26 @@ extern void kernel_free(void*,uint32_t size);
  * Uses buddy allocator under the hood
  *
  * This function cannot be called from interrupt context. Will return NULL if done so
- *  @param[in] uint32_t size in bytes 
- * 
- * @retval void * to allocated memory
- * @retval BAD_RTOS_STATUS_ALLOC_FAIL (null ptr) allocation failed 
- */
-extern void user_free(void *block, uint32_t size);
-/**
- * \b user_free
- *
- * Public function that tries to allocate a specifed number of bytes from user heap
- * Tries to free a specifed number of bytes allocated from user heap
- * 
- * Uses buddy allocator under the hood
- *
- * This function cannot be called from interrupt context. Will fail silently if done so
  * @param[in] uint32_t size in bytes 
  * 
  * @retval void * to allocated memory
  * @retval BAD_RTOS_STATUS_ALLOC_FAIL (null ptr) allocation failed 
  */
 extern void* user_alloc(uint32_t size);
+/**
+ * \b user_free
+ *
+ * Public function that tries to free a specifed number of bytes allocated from user heap
+ * 
+ * Uses buddy allocator under the hood
+ *
+ * This function cannot be called from interrupt context. Will fail silently if done so
+ * @param[in] uint32_t size in bytes 
+ * @param[in] void * to allocated memory
+ * 
+ * @retval BAD_RTOS_STATUS_ALLOC_FAIL (null ptr) allocation failed 
+ */
+extern void user_free(void* block, uint32_t size);
 #endif
 
 //****************************************************************
@@ -842,6 +845,7 @@ static tcb_bitmask_slab_t __attribute__((section(".kernel_bss"))) tcbslab;
 
 typedef struct free_block {
     struct free_block* next;
+    struct free_block* prev;
 }free_block_t;
 
 typedef struct {
@@ -849,9 +853,11 @@ typedef struct {
     uint32_t max_order;
     uint32_t min_order;
     uint32_t freelist_size;
-    free_block_t** free_list;
+    free_block_t* free_list;
+    uint32_t* bmask;
 }buddy_t;
-
+#define BUDDY_BITMASK_SIZE(max_order,min_order)\
+    (((1 << (max_order - min_order))-1)+31) >> 5 // bits required = (2 ^ max_order - min_order) - 1, to get the words divide by 32 and round up 
 #endif
 
 #if defined (BAD_RTOS_USE_KHEAP) 
@@ -859,8 +865,8 @@ typedef struct {
 #ifndef KMIN_ORDER
     #define KMIN_ORDER 5
 #else 
-    #if KMIN_ORDER < 2 
-        #error "minimal order should be >= 2 to store the pointer to the next free block "
+    #if KMIN_ORDER < 3 
+        #error "Minimal order should be >= 3 to store the pointers to the next free block and the prev block "
     #endif
 #endif
 
@@ -873,9 +879,12 @@ typedef struct {
 #endif 
 #define KHEAP_SIZE 1<<KMAX_ORDER
 #define KFREE_LIST_SIZE (KMAX_ORDER-KMIN_ORDER+1)
+
+    
 static uint8_t __attribute__((section(".kheap"))) kheap[KHEAP_SIZE];
 static buddy_t __attribute__((section(".kernel_bss")))kernel_buddy;
-static free_block_t* __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIST_SIZE];
+static free_block_t __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIST_SIZE];
+static uint32_t __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_SIZE(KMAX_ORDER, KMIN_ORDER)]; 
 #endif
 
 #if defined (BAD_RTOS_USE_UHEAP)
@@ -883,8 +892,8 @@ static free_block_t* __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIS
 #ifndef UMIN_ORDER
     #define UMIN_ORDER 5
 #else 
-    #if UMIN_ORDER < 2 
-        #error "minimal order should be >= 2 to store the pointer to the next free block "
+    #if UMIN_ORDER < 3 
+        #error "Minimal order should be >= 3 to store the pointers to the next free block and the prev block "
     #endif
 #endif
 #ifndef UMAX_ORDER 
@@ -899,8 +908,8 @@ static free_block_t* __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIS
 #define UFREE_LIST_SIZE (UMAX_ORDER-UMIN_ORDER+1)
 static uint8_t __attribute__((section(".uheap"))) uheap[UHEAP_SIZE];
 static buddy_t user_buddy;
-static free_block_t* ufreelist[KFREE_LIST_SIZE];
-
+static free_block_t ufreelist[KFREE_LIST_SIZE];
+static uint32_t ubitmask[BUDDY_BITMASK_SIZE(UMAX_ORDER, UMIN_ORDER)];
 #endif
 
 #define IDLE_TASK_PRIO 255
@@ -1112,15 +1121,21 @@ bad_queue_status_t msgq_post_msg(bad_msgq_t* q, uint32_t signal, void* args){
  * @param[in] uint32_t minimal order of allocation
  * @param[in] uint32_t maximum order of allocation (heap size)
  */
-void  __buddy_init(buddy_t* cb,uint8_t* heap, free_block_t** freelist,uint32_t min_order, uint32_t max_order){
+void  __buddy_init(buddy_t* cb,uint8_t* heap, free_block_t* freelist,uint32_t min_order, uint32_t max_order, uint32_t* bmask){
     cb->min_order = min_order;
     cb->max_order = max_order;
     cb->heap = heap;
     cb->free_list = freelist;
-    *cb->free_list = (free_block_t*)cb->heap;
+    cb->bmask = bmask;
     free_block_t* embedded_node = (free_block_t*)cb->heap;
-    embedded_node->next = 0;
-
+    cb->free_list->next = embedded_node;
+    cb->free_list->prev = embedded_node;
+    embedded_node->prev = cb->free_list;
+    embedded_node->next = cb->free_list;
+    for (uint32_t i = 1; i < max_order - min_order + 1; i++){
+        cb->free_list[i].next = &cb->free_list[i];
+        cb->free_list[i].prev = &cb->free_list[i];
+    }
 }
 /**
  * \b __buddy_alloc
@@ -1141,8 +1156,8 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
     uint32_t idx = cb->max_order  - order;
     uint32_t picked_idx = idx;
     
-    for( ; picked_idx != UINT32_MAX ; picked_idx--){
-        if(cb->free_list[picked_idx]!=0){
+    for( ; picked_idx != UINT32_MAX; picked_idx--){
+        if(cb->free_list[picked_idx].next != &cb->free_list[picked_idx]){
             break;
         }
     }
@@ -1151,17 +1166,36 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
         return (void* )BAD_RTOS_STATUS_ALLOC_FAIL;
     }
     
-    uint32_t splits = idx - picked_idx;
-    uint8_t *block_for_split = (uint8_t*)cb->free_list[picked_idx];
-    cb->free_list[picked_idx] = cb->free_list[picked_idx]->next;
-    uint32_t splited_block_size = 1 << (cb->max_order - picked_idx-1);
-    free_block_t* unused_block = 0;
 
-    for(uint32_t i =0; i < splits;i++){
-        unused_block = (free_block_t*)(block_for_split+splited_block_size);
-        unused_block->next = cb->free_list[picked_idx+1];
-        cb->free_list[picked_idx+1] = unused_block;
+    uint32_t splits = idx - picked_idx;
+    uint8_t *block_for_split = (uint8_t*)cb->free_list[picked_idx].next;
+    cb->free_list[picked_idx].next = cb->free_list[picked_idx].next->next;
+    cb->free_list[picked_idx].next->prev = &cb->free_list[picked_idx];
+    uint32_t splited_block_size = 1 << (cb->max_order - picked_idx-1);
+    free_block_t* unused_block;
+    uint32_t bmaskidx, bmask_word, bmask_bit,offset_from_base;
         
+    if(picked_idx){
+        offset_from_base =  block_for_split - cb->heap;
+        bmaskidx = ((1<<(picked_idx-1))-1) + ((offset_from_base) >> ( cb->max_order - picked_idx+1));
+        bmask_word = bmaskidx >> 5;
+        bmask_bit = bmaskidx & 31;
+        cb->bmask[bmask_word] ^= 1 << bmask_bit; 
+    }
+ 
+    
+    for(uint32_t i =0; i < splits;i++){
+        unused_block = (free_block_t *)(block_for_split+splited_block_size);
+        unused_block->next = cb->free_list[picked_idx+1].next;
+        cb->free_list[picked_idx+1].next = unused_block;
+        unused_block->prev = &cb->free_list[picked_idx+1];
+        unused_block->next->prev = unused_block;
+
+        offset_from_base = (uint8_t*)unused_block - cb->heap;
+        bmaskidx = ((1<<(picked_idx))-1) + ((offset_from_base) >> ( cb->max_order - picked_idx));
+        bmask_word = bmaskidx >> 5;
+        bmask_bit = bmaskidx & 31;
+        cb->bmask[bmask_word] ^= 1 << bmask_bit;
         picked_idx++;
         splited_block_size>>=1;
     }
@@ -1187,48 +1221,45 @@ static void __buddy_free(buddy_t* cb,void* block,uint32_t order ){
     }
 
     uint32_t curr_order = order; 
-    uint32_t found_buddy = 0;
     void *curr_block = block;
     uint32_t idx = 0;
-
-    do{
-        idx = cb->max_order  - curr_order;
+    
+    while((idx = cb->max_order - curr_order)){
         uint32_t buddy_bitmask = 1ULL << curr_order;
-        found_buddy = 0;
-        uint32_t offset = (uint8_t*)curr_block - cb->heap;
-        uint32_t buddy_offset = offset ^ buddy_bitmask;
-        uint32_t parent_offset = offset &(~buddy_bitmask);
-        void *buddy_addr = (void*)(cb->heap + buddy_offset);
-        void *parent_addr = (void*)(cb->heap + parent_offset);
+        
+        uint32_t offset_from_base = (uint8_t *)curr_block - cb->heap;
+        /*                     level                         pair                       */ 
+        uint32_t bmaskidx =  ((1<<(idx-1))-1) + ((offset_from_base) >> (curr_order + 1));
+        uint32_t bmask_word = bmaskidx >> 5;
+        uint32_t bmask_bit = bmaskidx & 31;
 
-        free_block_t *traverse = cb->free_list[idx];
-        free_block_t *prev = 0;
-  
-        if(traverse == buddy_addr){
-            found_buddy = 1;
-            cb->free_list[idx] = cb->free_list[idx]->next;
-            curr_block = parent_addr;
-            curr_order++;
-            continue;
+          
+        cb->bmask[bmask_word] ^= 1 << bmask_bit;
+        
+        if(cb->bmask[bmask_word] & 1 << bmask_bit){
+            break;
         }
 
-        while (traverse!=0) {
-            prev = traverse;
-            traverse = traverse->next;
-            if(traverse == buddy_addr){
-                prev->next = traverse->next;
-                curr_block = parent_addr;
-                curr_order++;
-                found_buddy = 1;
-                break;
-            }
-        } 
+        uint32_t buddy_offset = offset_from_base ^ buddy_bitmask;
+        uint32_t parent_offset = offset_from_base &(~buddy_bitmask);
+        void *buddy_addr = (void*)(cb->heap + buddy_offset);
+        void *parent_addr = (void*)(cb->heap + parent_offset); 
 
-    }while (found_buddy);
+
+        free_block_t *buddy = (free_block_t *)buddy_addr;
+        buddy->prev->next = buddy->next;
+        buddy->next->prev = buddy->prev;
+        buddy->prev = 0;
+        buddy->next = 0;
+        curr_order++;
+        curr_block = parent_addr;
+    }
 
     free_block_t *final_block = (free_block_t*)curr_block;
-    final_block->next = cb->free_list[idx];
-    cb->free_list[idx] = final_block;
+    final_block->next = cb->free_list[idx].next;
+    final_block->next->prev = final_block;
+    cb->free_list[idx].next = final_block;
+    final_block->prev = &cb->free_list[idx];
 }
 
 #endif
@@ -1291,7 +1322,7 @@ void* user_alloc(uint32_t size){
     }
 
     CONTEX_SWITCH_BARIER;
-    block =    __buddy_alloc(&user_buddy,closest_order );
+    block = __buddy_alloc(&user_buddy,closest_order );
     CONTEX_SWITCH_BARIER_RELEASE;
     return  block; 
 
@@ -2050,15 +2081,15 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t* mut){
 
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t count){
+bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value, uint16_t count){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
-    if(!sem || !count){
+    if(!sem || !count ||reset_value > count ){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     sem->blockedq = 0;
-    sem->counter = count;
+    sem->counter = reset_value;
     sem->count = count;
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
@@ -2150,14 +2181,14 @@ ALWAYS_INLINE bad_rtos_status_t __sem_put(bad_sem_t* sem){
     return BAD_RTOS_STATUS_OK;
 }
 // you dont need to call this if you initialise it yourself on .data 
-bad_rtos_status_t nbsem_init(bad_nbsem_t * nbsem,uint32_t count){ 
+bad_rtos_status_t nbsem_init(bad_nbsem_t * nbsem,uint32_t reset_value,uint32_t count){ 
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
-    if(!nbsem || !count){
+    if(!nbsem || !count || reset_value > count){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    nbsem->counter = count;
+    nbsem->counter = reset_value;
     nbsem->count = count;
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
@@ -2708,10 +2739,10 @@ void bad_rtos_start(){
     __restore_basepri(2<<4);    
     __tcb_queue_slab_init();
 #if defined (BAD_RTOS_USE_KHEAP)
-    __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER);
+    __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER, kbitmask);
 #endif
 #if defined (BAD_RTOS_USE_UHEAP) 
-    __buddy_init(&user_buddy, uheap, ufreelist, UMIN_ORDER, UMAX_ORDER);
+    __buddy_init(&user_buddy, uheap, ufreelist, UMIN_ORDER, UMAX_ORDER, ubitmask);
 #endif 
 #ifdef BAD_RTOS_USE_MPU
     __bad_rtos_mpu_default_setup();

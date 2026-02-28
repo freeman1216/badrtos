@@ -1,6 +1,5 @@
 CC = arm-none-eabi-gcc
-AS = arm-none-eabi-as
-CFLAGS = -ggdb -O2 -Wall -Wextra  -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
+CFLAGS = -ggdb -Wall -Wextra  -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
 LDFLAGS = -Tstm32f411ceu6.ld -nolibc --specs=nosys.specs -nostartfiles  
 INCLUDES = -Iinc/ -Iinc/driver/ -Iinc/rtos
 
@@ -19,6 +18,7 @@ SEM_BLOCK_SRC = $(SOURCES) tests/sem_block.c
 SEM_DELETE_SRC = $(SOURCES) tests/sem_delete.c
 MSGQ_SRC = $(SOURCES) tests/msgq.c
 NBSEM_DELETE_SRC = $(SOURCES) tests/nbsem_delete.c
+BUDDY_SRC = $(SOURCES) tests/buddy.c
 
 MAIN_BIN = $(BUILD_DIR)/main.elf
 TIME_FRAME_BIN = $(BUILD_DIR)/time_frame.elf
@@ -29,6 +29,7 @@ SEM_BLOCK_BIN = $(BUILD_DIR)/sem_block.elf
 SEM_DELETE_BIN = $(BUILD_DIR)/sem_delete.elf
 MSGQ_BIN = $(BUILD_DIR)/msgq.elf
 NBSEM_DELETE_BIN = $(BUILD_DIR)/nbsem_delete.elf
+BUDDY_BIN = $(BUILD_DIR)/buddy.elf
 
 PRIMARY_GOAL := $(firstword $(MAKECMDGOALS))
 
@@ -74,6 +75,9 @@ $(MSGQ_BIN): $(BUILD_DIR)
 $(NBSEM_DELETE_BIN): $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(NBSEM_DELETE_SRC) -o $@
 
+$(BUDDY_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(BUDDY_SRC) -o $@
+
 .PHONY: main
 main: clean $(MAIN_BIN)
 
@@ -100,6 +104,9 @@ msgq: clean $(MSGQ_BIN)
 
 .PHONY: nbsem_delete
 nbsem_delete: clean $(NBSEM_DELETE_BIN)
+
+.PHONY:	buddy
+buddy: clean $(BUDDY_BIN)
 
 .PHONY: debug
 debug:

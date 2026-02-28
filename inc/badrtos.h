@@ -1716,6 +1716,58 @@ ALWAYS_INLINE bad_rtos_status_t __remove_entry(bad_tcb_t**q ,bad_tcb_t* tcb,uint
     return BAD_RTOS_STATUS_OK;
 }
 /**
+ * \b __merge_queues
+ *  Internal function that merges two priority based queues (a temporary one and a main one(that is the target)). 
+ *  Temp queue ptr cannot be null, will derefence it if passed.
+ *  Misc enum of temporary queue should be updated to the target queues enum beforehand.
+ *  
+ * This function should not be called by the application
+ * This function should not be called on kernel_cb.delayq delta list
+ *
+ * @param[in] bad_tcb_t ** queue to merge into
+ * @param[in] bad_tcb_t * queue to merge
+ */
+ALWAYS_INLINE void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
+    bad_tcb_t *traverse_main = *mainq;
+    bad_tcb_t *traverse_temp = tempq;
+    bad_tcb_t *main_prev;
+    bad_tcb_t *insert;
+    
+    if(!traverse_main){
+        *mainq = tempq;
+        return;
+    }
+
+    ++traverse_temp->misc;
+    
+    if(traverse_temp->raised_priority < traverse_main->raised_priority ){
+        insert = traverse_temp;
+        main_prev = insert;
+        traverse_temp = traverse_temp->next;
+        __enqueue_head(mainq, insert, traverse_main->misc);
+    }
+    
+    while(traverse_main && traverse_temp){
+
+        if(traverse_temp->raised_priority < traverse_main->raised_priority){
+            insert = traverse_temp;
+            traverse_temp = traverse_temp->next;
+            insert->next = traverse_main;
+            insert->prev = traverse_main->prev;
+            traverse_main->prev->next = insert;
+            traverse_main->prev = insert;
+        }
+        main_prev = traverse_main;
+        traverse_main = traverse_main->next;
+    }
+
+    if(traverse_temp){
+        main_prev->next = traverse_temp;
+        traverse_temp->prev = main_prev;
+    }
+}
+
+/**
  * \b __sched_update
  *
  * Internal function that schedules a context switch
@@ -1812,31 +1864,38 @@ ALWAYS_INLINE void __handle_systick_event(BAD_SYSTICK_STATUS status){
     switch (status) {
 
         case BAD_SYSTICK_DELAY_WAKE_PENDING:{
+            bad_tcb_t *wake_list = 0;
             do{ 
                 bad_tcb_t* wake = __dequeue_delayq_head();
+             
                 if(wake->cbptr){
                     wake->cbptr(wake,wake->args);
                     wake->cbptr = 0;
                     wake->args = 0;
                 }
+
                 wake->counter = wake->ticks_to_change;
-                __enqueue_by_prio(&kernel_cb.readyq,wake,BAD_RTOS_MISC_READYQ_HEAD);
+                __enqueue_by_prio(&wake_list,wake,BAD_RTOS_MISC_READYQ_HEAD);
             }while(kernel_cb.delayq && !kernel_cb.delayq->counter);
+            __merge_queues(&kernel_cb.readyq,wake_list);
             __sched_try_update();
             break;
         }
         case BAD_SYSTICK_BOTH:{
+            bad_tcb_t *wake_list = 0;
             do{ 
                 bad_tcb_t* wake = __dequeue_delayq_head();
+
                 if(wake->cbptr){
                     wake->cbptr(wake,wake->args);
                     wake->cbptr = 0;
                     wake->args = 0;
                 }
-                wake->counter = wake->ticks_to_change;
-                __enqueue_by_prio(&kernel_cb.readyq,wake,BAD_RTOS_MISC_READYQ_HEAD);
-            }while(kernel_cb.delayq && !kernel_cb.delayq->counter);
 
+                wake->counter = wake->ticks_to_change;
+                __enqueue_by_prio(&wake_list,wake,BAD_RTOS_MISC_READYQ_HEAD);
+            }while(kernel_cb.delayq && !kernel_cb.delayq->counter);
+            __merge_queues(&kernel_cb.readyq,wake_list);
         }
         /* fallthrough */
         case BAD_SYSTICK_TIMEFRAME_PENDING:{
@@ -1988,18 +2047,8 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_delete(bad_mutex_t* mut){
     if(!mut){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(!mut->owner || curr != mut->owner ){
+    if(curr != mut->owner ){
         return BAD_RTOS_STATUS_NOT_OWNER;
-    }
-    bad_tcb_t * tcb;
-    while((tcb = __dequeue_head(&mut->blockedq, BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD))){
-        *(tcb->sp+8) = BAD_RTOS_STATUS_DELETED;
-        __enqueue_by_prio(&kernel_cb.readyq, tcb, BAD_RTOS_MISC_READYQ_HEAD);
-        if(tcb->cbptr == __mutex_timeout_cb){
-            tcb->cbptr = 0;
-            tcb->args = 0;
-            __dequeue_delayq(tcb);
-        }
     }
 
     curr->mutex_count--;
@@ -2007,6 +2056,25 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_delete(bad_mutex_t* mut){
         curr->raised_priority = curr->base_priority;
     }
     mut->owner = 0;
+    
+    if(!mut->blockedq){
+        return BAD_RTOS_STATUS_OK;
+    }
+    
+    bad_tcb_t *traverse = mut->blockedq;
+    while(traverse){
+        *(traverse->sp+8) = BAD_RTOS_STATUS_DELETED;
+        traverse->misc -= BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD - 1; 
+        if(traverse->cbptr == __mutex_timeout_cb){
+            traverse->cbptr = 0;
+            traverse->args = 0;
+            __dequeue_delayq(traverse);
+        }
+        traverse = traverse->next;
+    }
+
+    __merge_queues(&kernel_cb.readyq, mut->blockedq);
+
     __sched_try_update();
 
     return BAD_RTOS_STATUS_OK;

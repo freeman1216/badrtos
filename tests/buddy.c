@@ -52,8 +52,9 @@ START_TASK_MPU_REGIONS_DEFINITIONS(task1)
     DEFINE_PERIPH_ACCESS_REGION(USART1_BASE, sizeof(USART_typedef_t))
 END_TASK_MPU_REGIONS(task1)
 
-bad_tcb_t* task1tcb;
-bad_tcb_t* task2tcb;
+bad_tcb_t *task1tcb;
+bad_tcb_t *task2tcb;
+bad_tcb_t *task3tcb;
 uint32_t callback_hit;
 uint32_t unblocked;
 void cb(bad_tcb_t* unused0, void* unused1){
@@ -83,6 +84,11 @@ void task2(){
     }
 }
 
+void task3(){
+    while (1) {
+    
+    }
+}
 
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 1
@@ -109,6 +115,17 @@ void bad_user_setup(){
         .base_priority = TASK2_PRIORITY
     };
     task2tcb = task_make(&task2_descr);
+    bad_task_descr_t task3_descr = {
+        .stack = 0,
+        .stack_size = TASK1_STACK_SIZE,
+        .dyn_stack = 1,
+        .entry = task3,
+        .regions = task1_regions,
+        .region_count = MPU_REGIONS_SIZE(task1),
+        .ticks_to_change = 500,
+        .base_priority = IDLE_TASK_PRIO - 1
+    };
+    task3tcb = task_make(&task3_descr);
 }
 
 

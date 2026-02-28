@@ -40,8 +40,8 @@
 #define BAD_RTOS_USE_MSGQ       // message queues
 #define BAD_RTOS_USE_SEMAPHORE  //semaphores
 #define BAD_RTOS_USE_MPU        //mpu
-#define BAD_RTOS_MAX_TASKS 32 //maximum number of running tasks
-
+#define BAD_RTOS_MAX_TASKS 32   //maximum number of running tasks
+#define BAD_RTOS_SVC_PRIO 1     // Keep this higher than any ISR priority that interacts with the API and  Systick and Pendsv priorities
 
 #if BAD_RTOS_MAX_TASKS < 2
     #error "Number of tasks must be > 1 to accomodate for idle task"
@@ -54,12 +54,13 @@
 // asm helpers implemented in the asm portion of this file grep for "ASM stuff" to find it
 static inline uint32_t __attribute__((always_inline)) __modify_basepri(uint32_t basepri);
 static inline void __attribute__((always_inline)) __restore_basepri(uint32_t basepri);
-// critical section helpers using basepri 
+// critical section helpers using basepri
+#define CRITICAL_MASK ((BAD_RTOS_SVC_PRIO + 1) << 4)
 #define CONTEX_SWITCH_BARIER_STORE uint32_t context_basepri = 0;
 #define CONTEX_SWITCH_BARIER context_basepri = __modify_basepri(15<<4)
 #define CONTEX_SWITCH_BARIER_RELEASE __restore_basepri(context_basepri)
 #define CRITICAL_SECTION_STORE uint32_t critical_basepri = 0;
-#define CRITICAL_SECTION critical_basepri = __modify_basepri(2<<4)
+#define CRITICAL_SECTION critical_basepri = __modify_basepri(CRITICAL_MASK)
 #define CRITICAL_SECTION_END __restore_basepri(critical_basepri)
 // error codes 
 typedef enum {
@@ -2468,27 +2469,34 @@ __asm__ (
     "b       svc_c      \n"
 );
 //pendsv isr
-__asm__(
-".thumb_func            \n"
-".global pendsv_isr     \n"
-"pendsv_isr:            \n"
-    "mrs r0,psp         \n"
-    "stmdb r0!, {r4-r11}\n"
-    "ldr r4,=curr       \n"
-    "ldr r3,[r4]        \n"
-    "str r0,[r3]        \n"
-    "ldr r1,=next       \n" 
-    "ldr r2,[r1]        \n"  
-    "ldr r0,[r2]        \n"  
-    "mov r3,#0          \n"
-    "str r3,[r1]        \n"
-    "str r2,[r4]        \n"
-    "ldmia r0!,{r4-r11} \n"
-    "str r0,[r2]        \n"
-    "msr psp,r0         \n"
-    "bx lr              \n"
-    ".ltorg             \n"
-);
+void __attribute__((naked)) pendsv_isr(){ 
+    __asm__ volatile(
+        "mov r0,%0              \n"
+        "msr basepri,r0         \n"
+        "isb                    \n"
+        "mrs r0,psp             \n"
+        "stmdb r0!, {r4-r11}    \n"
+        "ldr r4,=curr           \n"
+        "ldr r3,[r4]            \n"
+        "str r0,[r3]            \n"
+        "ldr r1,=next           \n" 
+        "ldr r2,[r1]            \n"  
+        "ldr r0,[r2]            \n"  
+        "mov r3,#0              \n"
+        "str r3,[r1]            \n"
+        "str r2,[r4]            \n"
+        "ldmia r0!,{r4-r11}     \n"
+        "str r0,[r2]            \n"
+        "msr psp,r0             \n"
+        "msr basepri,r3         \n"
+        "isb                    \n"
+        "bx lr                  \n"
+        ".ltorg                 \n"
+        :
+        :"i" (CRITICAL_MASK)
+        : "memory"
+    );
+}
 
 //first task second stage init
 __asm__(
@@ -2736,7 +2744,7 @@ void bad_user_setup();
 
 void bad_rtos_start(){
 
-    __restore_basepri(2<<4);    
+    __restore_basepri(CRITICAL_MASK);    
     __tcb_queue_slab_init();
 #if defined (BAD_RTOS_USE_KHEAP)
     __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER, kbitmask);

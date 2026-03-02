@@ -1,3 +1,12 @@
+#define BAD_PLLM (25)
+#define BAD_PLLN (400)
+#define BAD_PLLQ (10)
+#define BAD_PLLP (PLLP4)
+
+#define BAD_AHB_PRE     (HPRE_DIV_1)
+#define BAD_APB1_PRE    (PPRE_DIV_2)
+#define BAD_APB2_PRE    (PPRE_DIV_1)
+
 #define BAD_USART_IMPLEMENTATION
 #define BAD_FLASH_IMPLEMENTATION
 #define BAD_RCC_IMPLEMENTATION
@@ -15,27 +24,14 @@
 #define UART1_TX_AF             (7)
 #define UART1_RX_AF             (7)
 
-    // HSE  = 25
-    // PLLM = 25
-    // PLLN = 400
-    // PLLQ = 10
-    // PLLP = 4
-    // Sysclock = 100
-
-#define BADHAL_PLLM (25)
-#define BADHAL_PLLN (400)
-#define BADHAL_PLLQ (10)
 #define BADHAL_FLASH_LATENCY (FLASH_LATENCY_3ws)
 
 #define BAD_RTOS_AHB1_PERIPEHRALS    (RCC_AHB1_GPIOA|RCC_AHB1_DMA2|RCC_AHB1_GPIOB)
 #define BAD_RTOS_APB2_PERIPHERALS    (RCC_APB2_USART1|RCC_APB2_SPI1|RCC_APB2_SYSCFGEN|RCC_APB2_TIM10)
 
 static inline void __main_clock_setup(){
-    rcc_enable_hse();
-    rcc_pll_setup( PLLP4, BADHAL_PLLM, BADHAL_PLLN, BADHAL_PLLQ, PLL_SOURCE_HSE);
-    rcc_bus_prescalers_setup(HPRE_DIV_1, PPRE_DIV_2, PPRE_DIV_1);
     flash_acceleration_setup(BADHAL_FLASH_LATENCY, FLASH_DCACHE_ENABLE, FLASH_ICACHE_ENABLE);
-    rcc_enable_and_switch_to_pll();
+    rcc_sysclock_setup();
 }
 
 

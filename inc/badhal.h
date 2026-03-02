@@ -20,12 +20,12 @@
 #define BAD_HAL_USE_EXTI
 #define BAD_HAL_USE_SYSCFG
 #define BAD_HAL_USE_BTIMER
-
+#define BAD_HAL_USE_CRC
 //common defines
 
 #define __IO volatile
 
-#define CLOCK_SPEED 100000000UL  // 100 MHz
+#define CLOCK_SPEED 100000000UL         //100MHZ
 #define FALLBACK_CLOCK_SPEED 16000000UL //16MHZ
 //hw interrupts (triggered by hardware and handled in drivers)
 #define STRONG_ISR(x) void x(void)
@@ -39,11 +39,11 @@
 #define UNUSED(x) (void)x
 
 #define OPT_BARRIER asm volatile("": : :"memory")
-#define DSB __asm volatile("dsb")
-#define DMB __asm volatile("dmb")
-#define ISB __asm volatile("isb")
-#define __ENABLE_INTERUPTS __asm volatile ("cpsie i")
-#define __DISABLE_INTERUPTS __asm volatile ("cpsid i")
+#define DSB __asm volatile("dsb":::"memory")
+#define DMB __asm volatile("dmb":::"memory")
+#define ISB __asm volatile("isb":::"memory")
+#define __ENABLE_INTERUPTS __asm volatile ("cpsie i":::"memory")
+#define __DISABLE_INTERUPTS __asm volatile ("cpsid i":::"memory")
 
 //Core
 
@@ -444,7 +444,7 @@ typedef enum{
 #define RCC_BASE (0x40023800UL)
 #define RCC ((__IO RCC_typedef_t *)RCC_BASE)
 
-extern inline void rcc_enable_hsi(void) {
+ALWAYS_INLINE void rcc_enable_hsi(void) {
     RCC->CR |= HSION_MASK;
     while (!(RCC->CR & HSIRDY_MASK));
 }
@@ -457,28 +457,28 @@ extern void rcc_fallback_to_hsi(){
 
 }
 
-extern inline void rcc_enable_hse(void) {
+ALWAYS_INLINE void rcc_enable_hse(void) {
     RCC->CR |= HSEON_MASK;
     while (!(RCC->CR & HSERDY_MASK));
 }
 
-extern inline void rcc_set_ahb1_clocking(RCC_AHB1_peripherals_t ahb1_mask){
+ALWAYS_INLINE void rcc_set_ahb1_clocking(RCC_AHB1_peripherals_t ahb1_mask){
     RCC->AHB1ENR = ahb1_mask;
 }
 
-extern inline void rcc_set_ahb2_clocking(RCC_AHB2_peripherals_t ahb2_mask){
+ALWAYS_INLINE void rcc_set_ahb2_clocking(RCC_AHB2_peripherals_t ahb2_mask){
     RCC->AHB2ENR = ahb2_mask;
 }
 
-extern inline void rcc_set_apb1_clocking(RCC_APB1_peripherals_t apb1_mask){
+ALWAYS_INLINE void rcc_set_apb1_clocking(RCC_APB1_peripherals_t apb1_mask){
     RCC->APB1ENR = apb1_mask;
 }
 
-extern inline void rcc_set_apb2_clocking(RCC_APB1_peripherals_t apb2_mask){
+ALWAYS_INLINE void rcc_set_apb2_clocking(RCC_APB2_peripherals_t apb2_mask){
     RCC->APB2ENR = apb2_mask;
 }
 
-extern inline void rcc_enable_and_switch_to_pll(){
+ALWAYS_INLINE void rcc_enable_and_switch_to_pll(){
     RCC->CR |= PLLON_MASK;
     while (!(RCC->CR & PLLRDY_MASK));
     RCC->CFGR &= ~(SW_MASK);
@@ -486,14 +486,14 @@ extern inline void rcc_enable_and_switch_to_pll(){
     while ((RCC->CFGR & SWS_MASK)  != SW_PLL<<2);// SWS repots same bits as SW just 2 bits farther
 }
 
-extern inline void rcc_bus_prescalers_setup(HPRE_state_t ahb_prescaler,PPRE_state_t apb1_prescaler,
+ALWAYS_INLINE void rcc_bus_prescalers_setup(HPRE_state_t ahb_prescaler,PPRE_state_t apb1_prescaler,
     PPRE_state_t apb2_prescaler)
 {
     RCC->CFGR &= ~(PPRE1_MASK | PPRE2_MASK | HPRE_MASK);
     RCC->CFGR |= PPRE1_SET(apb1_prescaler) | PPRE2_SET(apb2_prescaler) | HPRE_SET(ahb_prescaler);
 }
 
-extern inline void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,uint8_t PLLQ, PLL_source_t source){
+ALWAYS_INLINE void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,uint8_t PLLQ, PLL_source_t source){
     
     if(!(RCC->CR & HSION_MASK) && source == PLL_SOURCE_HSI){
         rcc_enable_hsi();
@@ -509,6 +509,13 @@ extern inline void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,u
     RCC->PLLCFGR = PLLP | PLLM_SET(PLLM) | PLLN_SET(PLLN) | PLLQ_SET(PLLQ) | source;  
     
 
+}
+
+extern void rcc_sysclock_setup(){
+    rcc_enable_hse();
+    rcc_pll_setup(BAD_PLLP, BAD_PLLM, BAD_PLLN, BAD_PLLQ, PLL_SOURCE_HSE);
+    rcc_bus_prescalers_setup(BAD_AHB_PRE, BAD_APB1_PRE, BAD_APB2_PRE);
+    rcc_enable_and_switch_to_pll();
 }
 
 #endif
@@ -848,20 +855,16 @@ BAD_USART_DEF void uart_send_hex_32bit(__IO USART_typedef_t* USART,uint32_t valu
 
 BAD_USART_DEF void uart_send_dec_unsigned_32bit(__IO USART_typedef_t *USART ,uint32_t value){
     char buff[11];
-    uint8_t idx = 0;
-    
+    char *write = buff+11;
+    *--write = 0;
+
     do{ 
-        buff[idx] = (value%10)+'0';
+        *--write = (value%10)+'0';
         value/=10;
-        idx++;
     }
     while (value!=0);
-    
-    idx --;
 
-    for(;idx!=0xFF;idx--){
-        uart_putchar_polling(USART,buff[idx]);
-    }
+    uart_send_str_polling(USART, write);
     uart_send_str_polling(USART, "\r\n");
 }
 #endif
@@ -1342,7 +1345,7 @@ typedef enum{
 
 #define SYSCFG_BASE (0x40013800UL)
 
-#define SYSCFG ((SYSCFG_typedef_t *)SYSCFG_BASE)
+#define SYSCFG ((__IO SYSCFG_typedef_t *)SYSCFG_BASE)
 
 ALWAYS_INLINE void syscfg_set_exti_pin(SYSCFG_EXTI_port_t port, uint8_t pin){
     uint8_t crnum = pin >> 2;
@@ -1388,21 +1391,21 @@ typedef enum{
 
 #define BTIM10_BASE 0x40014400UL
 
-#define BTIM10 ((BTIMER_typedef_t *)BTIM10_BASE)
+#define BTIM10 ((__IO BTIMER_typedef_t *)BTIM10_BASE)
 
 #define TIM_CR_CEN 0x1
 
-ALWAYS_INLINE void tim_enable(BTIMER_typedef_t* TIM){
+ALWAYS_INLINE void tim_enable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 |= TIM_CR_CEN; 
 }
 
-ALWAYS_INLINE void tim_disable(BTIMER_typedef_t* TIM){
+ALWAYS_INLINE void tim_disable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 &= ~TIM_CR_CEN;
 }
 
-BAD_TIMER_DEF void basic_timer_setup(BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
 #ifdef BAD_TIMER_IMPLEMENTATION
-BAD_TIMER_DEF void basic_timer_setup(BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
     TIM->ARR = barr;
     TIM->PSC = bpsc; 
     TIM->EGR = 1;
@@ -1411,6 +1414,26 @@ BAD_TIMER_DEF void basic_timer_setup(BTIMER_typedef_t* TIM,uint16_t barr,uint16_
 #endif
 
 #endif // BAD_HAL_USE_BTIMER
+
+#ifdef BAD_HAL_USE_CRC
+
+typedef struct {
+    __IO uint32_t DR;
+    __IO uint32_t IDR;
+    __IO uint32_t CR;
+}CRC_typedef_t;
+
+#define CRC_BASE 0x40023000
+
+#define CRC ((__IO CRC_typedef_t *)CRC_BASE)
+
+#define CRC_CR_RESET 0x1
+
+ALWAYS_INLINE void crc_reset(){
+    CRC->CR = CRC_CR_RESET;
+}
+
+#endif
 
 //Interrupts
 //Hardfault interrupt
@@ -1438,7 +1461,7 @@ void __attribute__((naked)) isr_hardfault(){
     );
 }
 
-void hardfault_c(uint32_t* stack){
+void __attribute__((used)) hardfault_c(uint32_t* stack){
     volatile uint32_t r0  = stack[0];
     volatile uint32_t r1  = stack[1];
     volatile uint32_t r2  = stack[2];

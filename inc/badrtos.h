@@ -79,7 +79,6 @@ typedef enum {
     BAD_RTOS_STATUS_RECURSIVE_PUT,
     BAD_RTOS_STATUS_WOKEN,
     BAD_RTOS_STATUS_DELETED,
-    BAD_RTOS_STATUS_CANT_DELETE,
     BAD_RTOS_STATUS_NOT_INITIALISED,
     BAD_RTOS_STATUS_WRONG_CONTEXT
 }bad_rtos_status_t;
@@ -174,22 +173,22 @@ typedef struct{
 
 #ifdef BAD_RTOS_USE_MUTEX
 typedef struct bad_mutex{
-    bad_tcb_t* owner;
-    bad_tcb_t* blockedq;
+    bad_tcb_t *owner;
+    bad_tcb_t *blockedq;
 } bad_mutex_t ;
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
 typedef struct bad_sem{
     uint16_t counter;
-    uint16_t count;
-    bad_tcb_t* blockedq;
-} bad_sem_t ;
+    uint16_t init_flag;
+    bad_tcb_t *blockedq;
+} bad_sem_t;
 
 typedef struct bad_nbsem{
+    volatile uint32_t init_flag;
     volatile uint32_t counter;
-    uint32_t count;
-} bad_nbsem_t ;
+} bad_nbsem_t;
 
 #endif
 
@@ -506,19 +505,18 @@ extern bad_rtos_status_t mutex_delete(bad_mutex_t* mut);
  * Public function to initialise semaphore object
  * initialises count field to the specifed count
  *
- * No need to call this if you can use an initiliser like bad_sem_t sem = {.count = N }
+ * No need to call this if you can use an initiliser like bad_sem_t sem = {.counter = N,.init_flag = 1 }
  *
  * Masks context switch and systick interrupts
  *
  * This function can be called from interrupt context. But is not reentrant if the object parameter is the same
  * @param[in] bad_sem_t* Ptr to semaphore object to initialise
  * @param[in] uint16_t Value to initialise semaphore counter with
- * @param[in] uint16_t Value cap of the semaphore
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
- * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore ptr is null or count is 0
+ * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore ptr is null 
  */
-extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value,uint16_t count);
+extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value);
 /**
  * \b sem_take
  *
@@ -544,7 +542,7 @@ extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value,uint16_t c
  *
  * @retval BAD_RTOS_STATUS_OK Semaphore successfully taken
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex ptr is null
- * @retval BAD_RTOS_STATUS_NOT_INITIALISED sem count is 0
+ * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  * @retval BAD_RTOS_STATUS_WOULD_BLOCK take failed without blocking the caller
  */
 extern bad_rtos_status_t sem_take(bad_sem_t*,uint32_t delay);
@@ -554,7 +552,7 @@ extern bad_rtos_status_t sem_take(bad_sem_t*,uint32_t delay);
  * Public SVC (svc 0x88) call that calls internal function __sem_put
  * Tries to put the semaphore
  *
- * If the semaphores counter is less than its recorded count then the highest priority blocked task 
+ * If the semaphores counter is 0 and a blocked task exists the highest priority blocked task 
  * is woken with BAD_RTOS_STATUS_OK written to its 
  * stacked registers, its callback is canceled and tries to preempt the current running task. 
  * If there is no blocked task semaphore counter is incremented. 
@@ -566,7 +564,7 @@ extern bad_rtos_status_t sem_take(bad_sem_t*,uint32_t delay);
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully put
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
- * @retval BAD_RTOS_STATUS_RECURSIVE_PUT the caller tried to increase the sem counter higher than the count 
+ * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
 extern bad_rtos_status_t sem_put(bad_sem_t* sem);
 /**
@@ -584,6 +582,7 @@ extern bad_rtos_status_t sem_put(bad_sem_t* sem);
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully deleted
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
+ * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
 extern bad_rtos_status_t sem_delete(bad_sem_t* sem);
 //Non blocking semaphore api
@@ -593,19 +592,18 @@ extern bad_rtos_status_t sem_delete(bad_sem_t* sem);
  * Public function to initialise non blocking semaphore object
  * initialises count field to the specifed count
  *
- * No need to call this if you can use an initiliser like bad_nbsem_t sem = {.count = N }
+ * No need to call this if you can use an initiliser like bad_nbsem_t sem = {.count = N, .init_flag = 1 }
  *
  * Masks context switch and systick interrupts
  *
  * This function can be called from interrupt context. But is not reentrant if the object parameter is the same
  * @param[in] bad_sem_t* Ptr to semaphore object to initialise
  * @param[in] uint32_t Value to initialise semaphore with
- * @param[in] uint32_t Value cap of the semaphore
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
- * @retval BAD_RTOS_STATUS_BAD_PARAMETERS nbsemaphore ptr is null or count is 0
+ * @retval BAD_RTOS_STATUS_BAD_PARAMETERS nbsemaphore ptr is null
  */
-extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem, uint32_t reset_value, uint32_t count);
+extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem, uint32_t reset_value);
 /**
  * \b nbsem_take
  *
@@ -616,16 +614,13 @@ extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem, uint32_t reset_value, uint
  * 
  * into ready queue with BAD_RTOS_STATUS_TIMEOUT code in tasks stacked registers
  *
- * If the function is called from the isr delay value is ignored and treated as -1
- *
  * This function can be called from interrupt context. This function is reentrant 
  *
  * @param[in] bad_sem_t* Ptr to semaphore object to try take  
- * @param[in] uint32_t delay ticks 0 = block, -1 = dont block, N = block for N ticks
  *
  * @retval BAD_RTOS_STATUS_OK Semaphore successfully taken
- * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex ptr is null
- * @retval BAD_RTOS_STATUS_NOT_INITIALISED sem count is 0
+ * @retval BAD_RTOS_STATUS_BAD_PARAMETERS sem ptr is null
+ * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
 extern bad_rtos_status_t nbsem_take(bad_nbsem_t* sem);
 /** 
@@ -642,7 +637,7 @@ extern bad_rtos_status_t nbsem_take(bad_nbsem_t* sem);
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully put
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
- * @retval BAD_RTOS_STATUS_RECURSIVE_PUT the caller tried to increase the sem counter higher than the count 
+ * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
 extern bad_rtos_status_t nbsem_put(bad_nbsem_t* sem);
 /**
@@ -657,6 +652,7 @@ extern bad_rtos_status_t nbsem_put(bad_nbsem_t* sem);
  *
  * @retval BAD_RTOS_STATUS_OK semaphore successfully deleted
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
+ * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
 extern bad_rtos_status_t nbsem_delete(bad_nbsem_t* sem);
 #endif
@@ -2074,6 +2070,7 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_delete(bad_mutex_t* mut){
     }
 
     __merge_queues(&kernel_cb.readyq, mut->blockedq);
+    mut->blockedq = 0;
 
     __sched_try_update();
 
@@ -2150,16 +2147,16 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t* mut){
 
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value, uint16_t count){
+bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
-    if(!sem || !count ||reset_value > count ){
+    if(!sem){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     sem->blockedq = 0;
     sem->counter = reset_value;
-    sem->count = count;
+    sem->init_flag = 1;
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
 }
@@ -2174,7 +2171,7 @@ bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value, uint16_t count){
  *
  */
 ALWAYS_INLINE void __sem_timeout_cb(bad_tcb_t* tcb ,void * semaphore){
-    bad_sem_t * sem = (bad_sem_t* ) semaphore;
+    bad_sem_t *sem = (bad_sem_t* ) semaphore;
     __remove_entry(&sem->blockedq,tcb,BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD);
     *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
 }
@@ -2183,11 +2180,33 @@ ALWAYS_INLINE bad_rtos_status_t __sem_delete(bad_sem_t* sem){
     if(!sem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(sem->counter != sem->count){
-        return BAD_RTOS_STATUS_CANT_DELETE;
+
+    if(!sem->init_flag){
+        return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
+
     sem->counter = 0;
-    sem->count = 0; 
+    sem->init_flag = 0;
+
+    if(!sem->blockedq){
+        return BAD_RTOS_STATUS_OK;
+    }
+    
+    bad_tcb_t *traverse = sem->blockedq;
+    while(traverse){
+        *(traverse->sp+8) = BAD_RTOS_STATUS_DELETED;
+        traverse->misc -= BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD - 1; 
+        if(traverse->cbptr == __sem_timeout_cb){
+            traverse->cbptr = 0;
+            traverse->args = 0;
+            __dequeue_delayq(traverse);
+        }
+        traverse = traverse->next;
+    }
+
+    __merge_queues(&kernel_cb.readyq, sem->blockedq);
+    sem->blockedq = 0;
+
     __sched_try_update();
 
     return BAD_RTOS_STATUS_OK;
@@ -2197,7 +2216,7 @@ ALWAYS_INLINE bad_rtos_status_t __sem_take(bad_sem_t* sem, uint32_t delay){
     if(!sem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(!sem->count){
+    if(!sem->init_flag){
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
@@ -2226,13 +2245,10 @@ ALWAYS_INLINE bad_rtos_status_t __sem_put(bad_sem_t* sem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
 
-    if(!sem->count){
+    if(!sem->init_flag){
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
 
-    if(sem->count == sem->counter){
-        return BAD_RTOS_STATUS_RECURSIVE_PUT;
-    }
     // wakes a task and returns a success code using stacked registers
     if(sem->blockedq){
         bad_tcb_t * tcb = __dequeue_head(&sem->blockedq, BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD);
@@ -2250,15 +2266,15 @@ ALWAYS_INLINE bad_rtos_status_t __sem_put(bad_sem_t* sem){
     return BAD_RTOS_STATUS_OK;
 }
 // you dont need to call this if you initialise it yourself on .data 
-bad_rtos_status_t nbsem_init(bad_nbsem_t * nbsem,uint32_t reset_value,uint32_t count){ 
+bad_rtos_status_t nbsem_init(bad_nbsem_t * nbsem,uint32_t reset_value){ 
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
-    if(!nbsem || !count || reset_value > count){
+    if(!nbsem){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     nbsem->counter = reset_value;
-    nbsem->count = count;
+    nbsem->init_flag = 1;
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
 }
@@ -2271,7 +2287,7 @@ bad_rtos_status_t nbsem_take(bad_nbsem_t* nbsem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
  
-    if(!nbsem->count){
+    if(!nbsem->init_flag){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
@@ -2300,7 +2316,7 @@ bad_rtos_status_t nbsem_put(bad_nbsem_t* nbsem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
 
-    if(!nbsem->count){
+    if(!nbsem->init_flag){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
@@ -2308,11 +2324,6 @@ bad_rtos_status_t nbsem_put(bad_nbsem_t* nbsem){
     uint32_t counter;
     do{
         counter = __ldrex(&nbsem->counter);
-        if(counter == nbsem->count){
-            __clrex();
-            CONTEX_SWITCH_BARIER_RELEASE;
-            return BAD_RTOS_STATUS_RECURSIVE_PUT;
-        }
     }while(__strex(counter+1, &nbsem->counter));
 
     DMB;
@@ -2328,13 +2339,10 @@ bad_rtos_status_t nbsem_delete(bad_nbsem_t * nbsem){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(nbsem->counter != nbsem->count){
-        CONTEX_SWITCH_BARIER_RELEASE;
-        return BAD_RTOS_STATUS_CANT_DELETE;
-    }
+
     //basically just resets the semaphore, leaving memory operations to the program
     nbsem->counter = 0;
-    nbsem->count = 0;
+    nbsem->init_flag = 0;
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
 }
@@ -2627,7 +2635,9 @@ static inline __attribute__((always_inline)) void __set_control(uint32_t new_con
     __asm__ volatile(
             "msr control, %0    \n"
             "isb                \n"
-            : : "r"(new_control)); 
+            : : "r"(new_control)
+            : "memory"
+            ); 
 }
 static inline __attribute__((always_inline)) uint32_t __get_control(){
     uint32_t res;

@@ -1,16 +1,13 @@
-#include <stdint.h>
-#include <stdbool.h>
-
-#include "common.h"
-#include "nvic.h"
-
+#define BAD_USART_IMPLEMENTATION
+#define BAD_FLASH_IMPLEMENTATION
 #define BAD_RCC_IMPLEMENTATION
-#include "rcc.h"
-#include "flash.h"
+#define BAD_GPIO_IMPLEMENTATION
 
-#define BAD_IO_IMPLEMENTATION
-#include "io.h"
+#define BAD_HARDFAULT_USE_UART
+#define BAD_HARDFAULT_ISR_IMPLEMENTATION
 
+#define BAD_RTOS_IMPLEMENTATION
+#include "badrtos.h"
 
 #define UART_GPIO_PORT          (GPIOA)
 #define UART1_TX_PIN            (9)
@@ -18,22 +15,13 @@
 #define UART1_TX_AF             (7)
 #define UART1_RX_AF             (7)
 
-
-
-
-#define BAD_USART_IMPLEMENTATION
-#include "uart.h"
-
-#define BAD_RTOS_IMPLEMENTATION
-#include "rtos_core.h"
-
-
     // HSE  = 25
     // PLLM = 25
     // PLLN = 400
     // PLLQ = 10
     // PLLP = 4
     // Sysclock = 100
+
 #define BADHAL_PLLM (25)
 #define BADHAL_PLLN (400)
 #define BADHAL_PLLQ (10)
@@ -68,9 +56,6 @@ bad_tcb_t* task2tcb;
 bad_sem_t sem ;
 void task1(){
     while (1) {
-        sem_take(&sem,0);
-        task_yield();
-        sem_put(&sem);
         task_yield();
         while (1) {
             if(sem_delete(&sem) == BAD_RTOS_STATUS_OK){
@@ -89,9 +74,6 @@ void task2(){
         if(status != BAD_RTOS_STATUS_OK){
             task_finish();
         }
-        task_yield();
-        sem_put(&sem);
-        task_yield();
     }
 }
 void task3(){
@@ -101,9 +83,6 @@ void task3(){
         if(status != BAD_RTOS_STATUS_OK){
             task_finish();
         }
-        task_yield();
-        sem_put(&sem);
-        task_yield();
     }
 }
 
@@ -144,7 +123,7 @@ void bad_user_setup(){
         .base_priority = TASK3_PRIORITY
     };
     task2tcb = task_make(&task3_descr);
-    sem_init(&sem, 2);
+    sem_init(&sem, 0);
 }
 
 

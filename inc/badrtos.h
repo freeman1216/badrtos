@@ -16,6 +16,7 @@
  *    to be alligned by  32, which ensures allignment by 32 for static and dynamic stacks
  *  - ! Kernel syscall interrupt priority is 1, Pendsv and systick priorities are 15 so for user interrupts use 
  *    priorities 2-14
+ *  - !! If the task uses FPU make sure the stack size can accomodate additional 33 registers 
  */
 #pragma once
 #include <stdint.h>
@@ -33,7 +34,7 @@
 #define BAD_RTOS_USE_KHEAP      //kernel heap
 //#define KMIN_ORDER 5          //kernel heap minimal order of allocation (size = 1 << MIN_ORDER = 32)
 //#define KMAX_ORDER 12         //kernel heap maximum order of allocation (heap_size) (size = 1 << MIN_ORDER = 4096)
-#define BAD_RTOS_USE_UHEAP    //user heap
+#define BAD_RTOS_USE_UHEAP      //user heap
 //#define UMIN_ORDER 5          //user heap minimal order of allocation (size = 1 << MIN_ORDER = 32)
 //#define UMAX_ORDER 12         //user heap maximum order of allocation (heap size) (size = 1 << MIN_ORDER = 4096)
 #define BAD_RTOS_USE_MUTEX      //mutexes
@@ -42,6 +43,15 @@
 #define BAD_RTOS_USE_MPU        //mpu
 #define BAD_RTOS_MAX_TASKS 32   //maximum number of running tasks
 #define BAD_RTOS_SVC_PRIO 1     // Keep this higher than any ISR priority that interacts with the API and  Systick and Pendsv priorities
+#define BAD_RTOS_USE_FPU        //fpu
+
+#ifdef BAD_RTOS_IMPLEMENTATION
+#ifdef BAD_RTOS_USE_FPU
+#define BAD_HAL_USE_FPU
+#endif // BAD_RTOS_USE_FPU
+#define BAD_SYSTICK_SYSTICK_ISR_IMPLEMENTATION
+#endif
+#include "badhal.h"
 
 #if BAD_RTOS_MAX_TASKS < 2
     #error "Number of tasks must be > 1 to accomodate for idle task"
@@ -126,6 +136,18 @@ typedef struct bad_tcb{
     void (*cbptr)(struct bad_tcb* tcb,void * par);
     //args for the callback
     void* args;
+    struct bad_tcb* prev;
+    struct bad_tcb* next;
+    bad_rtos_misc_t misc;
+    struct bad_tcb* delayq_prev;
+    struct bad_tcb* delayq_next;
+    bad_rtos_delayq_misc_t delayq_misc;
+    uint32_t ticks_to_change;   
+    volatile uint32_t counter;
+#if defined (BAD_RTOS_USE_MPU)
+    const mpu_region_t *regions;
+    uint8_t region_count;
+#endif
 #if defined (BAD_RTOS_USE_KHEAP)
     //a flag for dynamic stack
     uint8_t dyn_stack ;
@@ -136,38 +158,24 @@ typedef struct bad_tcb{
 #ifdef BAD_RTOS_USE_MUTEX
     uint8_t mutex_count;
 #endif
-#if defined (BAD_RTOS_USE_MPU)
-    uint8_t region_count;
-
-    const mpu_region_t *regions;
-#endif
-    struct bad_tcb* prev;
-    struct bad_tcb* next;
-    bad_rtos_misc_t misc;
-    struct bad_tcb* delayq_prev;
-    struct bad_tcb* delayq_next;
-    bad_rtos_delayq_misc_t delayq_misc;
-    uint32_t ticks_to_change;   
-    volatile uint32_t counter;
 }bad_tcb_t;
 
 typedef void (*cbptr)(struct bad_tcb* tcb,void * par); 
 //task decription for task creation
 typedef struct{
-    
     uint32_t stack_size;
     uint32_t* stack;
     taskptr entry;
     void* args;
-#if defined (BAD_RTOS_USE_KHEAP)
-    uint8_t dyn_stack;
-#endif
+    uint32_t ticks_to_change;
 #ifdef BAD_RTOS_USE_MPU
     const mpu_region_t *regions;
     uint8_t region_count;
 #endif
+#if defined (BAD_RTOS_USE_KHEAP)
+    uint8_t dyn_stack;
+#endif
     uint8_t base_priority;
-    uint32_t ticks_to_change;
 }bad_task_descr_t;
 
 #ifdef BAD_RTOS_USE_MUTEX
@@ -194,11 +202,11 @@ typedef struct bad_nbsem{
 #ifdef BAD_RTOS_USE_MSGQ
 typedef struct {
     uint32_t signal;
-    void* args;
+    void *args;
 } bad_msg_block_t;
 
 typedef struct {
-    bad_msg_block_t* msgs;
+    bad_msg_block_t *msgs;
     volatile uint32_t head;
     volatile uint32_t tail;
     uint32_t capacity;
@@ -253,14 +261,14 @@ _Static_assert(MPU_REGIONS_SIZE(name)<=3,"The number of arbitrary regions should
 //Macro for static stack definition
 #ifdef BAD_RTOS_USE_MPU
 #define TASK_STATIC_STACK(task_name,size)\
-_Static_assert((size&(size-1))==0,"Stack sizes must be powers of 2");\
+_Static_assert(size % 32 == 0,"Stack sizes must be multiples of 32");\
 _Static_assert(size >= 128,"Stacks must be at least 128 bytes to accomodate exception stacked registers and stack cannary");\
 static uint32_t task_name##_stack[size/sizeof(uint32_t)] __attribute__((section(".static_stacks")));
 #else 
 #define TASK_STATIC_STACK(task_name,size)\
+_Static_assert(size % 8 == 0,"Stack sizes must be multiples of 8")
 _Static_assert(size >= 64,"Stacks must be at least 64 bytes to accomodate exception stacked registers");\
 static uint32_t task_name##_stack[size/sizeof(uint32_t)] __attribute__((section(".static_stacks")));
-
 #endif 
 
 // PUBLIC API**********************************************
@@ -313,7 +321,7 @@ extern bad_tcb_t* task_make(bad_task_descr_t* descr);
  * @retval  BAD_RTOS_STATUS_WOKEN the task was woken by another task or isr
  * @retval  BAD_RTOS_STATUS_WRONG_CONTEXT the function was called by an isr  
  */
-extern bad_rtos_status_t task_delay(uint32_t delay, cbptr cb, void* args );
+extern bad_rtos_status_t task_delay(uint32_t delay, cbptr cb, void *args );
 /**
  * \b task_block
  *
@@ -348,7 +356,7 @@ extern bad_rtos_status_t task_block();
  * @retval  BAD_RTOS_STATUS_OK task is successfully unblocked
  * @retval  BAD_RTOS_STATUS_NOT_BLOCKED the task is not blocked
  */
-extern bad_rtos_status_t task_unblock(bad_tcb_t* task);
+extern bad_rtos_status_t task_unblock(bad_tcb_t *task);
 /**
  * \b task_yield
  *
@@ -399,7 +407,7 @@ extern bad_rtos_status_t task_finish();
  * @retval  BAD_RTOS_STATUS_OK tasks delay successfully canceled
  * @retval  BAD_RTOS_STATUS_NOT_DELAYED task is not delayed 
  */
-extern bad_rtos_status_t task_delay_cancel(bad_tcb_t* task);
+extern bad_rtos_status_t task_delay_cancel(bad_tcb_t *task);
 
 #ifdef BAD_RTOS_USE_MUTEX
 // Priority inheriting mutex api
@@ -418,7 +426,7 @@ extern bad_rtos_status_t task_delay_cancel(bad_tcb_t* task);
  * @retval BAD_RTOS_STATUS_OK mutex successfully initialised
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex ptr is null
  */
-extern bad_rtos_status_t mutex_init(bad_mutex_t* mut);
+extern bad_rtos_status_t mutex_init(bad_mutex_t *mut);
 /**
  * \b mutex_take
  *
@@ -450,7 +458,7 @@ extern bad_rtos_status_t mutex_init(bad_mutex_t* mut);
  * @retval BAD_RTOS_STATUS_WOULD_BLOCK take failed without blocking the caller
  * @retval BAD_RTOS_STATUS_WRONG_CONTEXT function was called from an isr
  */
-extern bad_rtos_status_t mutex_take(bad_mutex_t*,uint32_t delay);
+extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,uint32_t delay);
 /**
  * \b mutex_put
  *
@@ -474,7 +482,7 @@ extern bad_rtos_status_t mutex_take(bad_mutex_t*,uint32_t delay);
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex object is NULL
  * @retval BAD_RTOS_STATUS_WRONG_CONTEXT function was called from an isr
  */
-extern bad_rtos_status_t mutex_put(bad_mutex_t* mut);
+extern bad_rtos_status_t mutex_put(bad_mutex_t *mut);
 /**
  * \b mutex_delete
  *
@@ -493,7 +501,7 @@ extern bad_rtos_status_t mutex_put(bad_mutex_t* mut);
  * @retval BAD_RTOS_STATUS_NOT_OWNER caller is not the owner of this mutex object
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex object is NULL
  */
-extern bad_rtos_status_t mutex_delete(bad_mutex_t* mut);
+extern bad_rtos_status_t mutex_delete(bad_mutex_t *mut);
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
@@ -515,7 +523,7 @@ extern bad_rtos_status_t mutex_delete(bad_mutex_t* mut);
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore ptr is null 
  */
-extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value);
+extern bad_rtos_status_t sem_init(bad_sem_t *sem,uint16_t reset_value);
 /**
  * \b sem_take
  *
@@ -544,7 +552,7 @@ extern bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value);
  * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  * @retval BAD_RTOS_STATUS_WOULD_BLOCK take failed without blocking the caller
  */
-extern bad_rtos_status_t sem_take(bad_sem_t*,uint32_t delay);
+extern bad_rtos_status_t sem_take(bad_sem_t *sem,uint32_t delay);
 /**
  * \b sem_put
  *
@@ -565,7 +573,7 @@ extern bad_rtos_status_t sem_take(bad_sem_t*,uint32_t delay);
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
  * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
-extern bad_rtos_status_t sem_put(bad_sem_t* sem);
+extern bad_rtos_status_t sem_put(bad_sem_t *sem);
 /**
  * \b sem_delete
  *
@@ -583,7 +591,7 @@ extern bad_rtos_status_t sem_put(bad_sem_t* sem);
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
  * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
-extern bad_rtos_status_t sem_delete(bad_sem_t* sem);
+extern bad_rtos_status_t sem_delete(bad_sem_t *sem);
 //Non blocking semaphore api
 /**
  * \b nbsem_init
@@ -602,7 +610,7 @@ extern bad_rtos_status_t sem_delete(bad_sem_t* sem);
  * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS nbsemaphore ptr is null
  */
-extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem, uint32_t reset_value);
+extern bad_rtos_status_t nbsem_init(bad_nbsem_t *sem, uint32_t reset_value);
 /**
  * \b nbsem_take
  *
@@ -621,7 +629,7 @@ extern bad_rtos_status_t nbsem_init(bad_nbsem_t* sem, uint32_t reset_value);
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS sem ptr is null
  * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
-extern bad_rtos_status_t nbsem_take(bad_nbsem_t* sem);
+extern bad_rtos_status_t nbsem_take(bad_nbsem_t *sem);
 /** 
  * \b nbsem_put
  *
@@ -638,7 +646,7 @@ extern bad_rtos_status_t nbsem_take(bad_nbsem_t* sem);
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
  * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
-extern bad_rtos_status_t nbsem_put(bad_nbsem_t* sem);
+extern bad_rtos_status_t nbsem_put(bad_nbsem_t *sem);
 /**
  * \b sem_delete
  *
@@ -653,7 +661,7 @@ extern bad_rtos_status_t nbsem_put(bad_nbsem_t* sem);
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore object is NULL
  * @retval BAD_RTOS_STATUS_NOT_INITIALISED init flag is 0
  */
-extern bad_rtos_status_t nbsem_delete(bad_nbsem_t* sem);
+extern bad_rtos_status_t nbsem_delete(bad_nbsem_t *sem);
 #endif
 
 
@@ -684,7 +692,7 @@ bad_msgq_t name = {.capacity = size,.msgs = name##_blocks};
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS queue ptr is 0 or size of the queue is 0 or not power of 2
  * @retval BAD_RTOS_STATUS_ALLOC_FAIL allocation failed
  */
-extern bad_rtos_status_t msgq_init(bad_msgq_t* q ,uint32_t size, void* (* alloc_func)(uint32_t size));
+extern bad_rtos_status_t msgq_init(bad_msgq_t *q ,uint32_t size, void* (* alloc_func)(uint32_t size));
 /**
  * \b msgq_deinit
  *
@@ -703,7 +711,7 @@ extern bad_rtos_status_t msgq_init(bad_msgq_t* q ,uint32_t size, void* (* alloc_
  * @retval BAD_RTOS_STATUS_BAD_PARAMETERS queue ptr or free_func is 0 or size of the queue is 0 or not power of 2 or
  * @retval BAD_RTOS_STATUS_ALLOC_FAIL allocation failed
  */
-extern bad_rtos_status_t msgq_deinit(bad_msgq_t *q,void(* free_func)(void* block,uint32_t size));
+extern bad_rtos_status_t msgq_deinit(bad_msgq_t *q,void(* free_func)(void *block,uint32_t size));
 #endif
 /**
  * \b msgq_pull_msg
@@ -773,7 +781,7 @@ extern void* kernel_alloc(uint32_t size);
  * @param[in] uint32_t size in bytes 
  * 
  */
-extern void kernel_free(void* block,uint32_t size);
+extern void kernel_free(void *block,uint32_t size);
 #endif
 
 #if defined (BAD_RTOS_USE_UHEAP)
@@ -804,7 +812,7 @@ extern void* user_alloc(uint32_t size);
  * 
  * @retval BAD_RTOS_STATUS_ALLOC_FAIL (null ptr) allocation failed 
  */
-extern void user_free(void* block, uint32_t size);
+extern void user_free(void *block, uint32_t size);
 #endif
 
 //****************************************************************
@@ -1053,6 +1061,9 @@ bad_queue_status_t msgq_pull_msg(bad_msgq_t* q, bad_msg_block_t* writeback ){
         CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_QUEUE_EMPTY;
     }
+
+    OPT_BARRIER;
+
     *writeback = *(q->msgs+q->tail);
     
     OPT_BARRIER;
@@ -1929,7 +1940,8 @@ ALWAYS_INLINE uint32_t * __init_stack(void (*task)(), uint32_t* stacktop,void * 
     *--stacktop = 0x02020202UL;     // R2
     *--stacktop = 0x01010101UL;     // R1
     *--stacktop = (uint32_t)args;     // R0 (parameter, optional)
-    for(uint8_t i = 0;i<8;i++){
+    *--stacktop = 0xFFFFFFFDUL;  //lr pushed to track fpu state (thread mode + PSP + No FPU)
+    for(uint8_t i = 0;i < 8;i++){
         *--stacktop = 0xDEADBEEFUL;
     }
     return stacktop;
@@ -2530,17 +2542,17 @@ __asm__ (
     "beq     isr        \n"
 "thread:                \n"
     "mrs     r1, psp    \n"
-    "mov     r4, #0xF0  \n"      
+    "mov     r2, #0xF0  \n"      
     "b       common     \n"
 "isr:                   \n"
     "mrs     r1, msp    \n"
-    "mov     r4, #0x0F  \n"    
+    "mov     r2, #0x0F  \n"    
 "common:                \n"
     "add     r3, r1, #24\n"
-    "ldr     r2, [r3]   \n"
-    "sub     r2, #2     \n"
-    "ldrb    r0, [r2]   \n"
-    "and     r0, r4     \n"      
+    "ldr     r3, [r3]   \n"
+    "sub     r3, #2     \n"
+    "ldrb    r0, [r3]   \n"
+    "and     r0, r2     \n"      
     "b       svc_c      \n"
 );
 //pendsv isr
@@ -2550,7 +2562,10 @@ void __attribute__((naked)) pendsv_isr(){
         "msr basepri,r0         \n"
         "isb                    \n"
         "mrs r0,psp             \n"
-        "stmdb r0!, {r4-r11}    \n"
+        "tst lr,#0x10           \n"
+        "it eq                  \n"
+        "vstmdbeq r0!, {s16-s31}\n"
+        "stmdb r0!, {r4-r11,lr} \n"
         "ldr r4,=curr           \n"
         "ldr r3,[r4]            \n"
         "str r0,[r3]            \n"
@@ -2560,7 +2575,10 @@ void __attribute__((naked)) pendsv_isr(){
         "mov r3,#0              \n"
         "str r3,[r1]            \n"
         "str r2,[r4]            \n"
-        "ldmia r0!,{r4-r11}     \n"
+        "ldmia r0!, {r4-r11,lr} \n"
+        "tst lr,#0x10           \n"
+        "it eq                  \n"
+        "vldmiaeq r0!, {s16-s31}\n"
         "str r0,[r2]            \n"
         "msr psp,r0             \n"
         "msr basepri,r3         \n"
@@ -2583,10 +2601,9 @@ __asm__(
     "ldr r3,=curr               \n"
     "ldr r2,[r3]                \n"
     "ldr r0,[r2]                \n"
-    "ldmia r0!,{r4-r11}         \n"
+    "ldmia r0!,{r4-r11,lr}      \n"
     "str r0,[r2]                \n"
     "msr psp, r0                \n"
-    "mov lr, #0xFFFFFFFD        \n"
     "bx lr                      \n"
     ".ltorg                     \n"
 );
@@ -2632,11 +2649,11 @@ static inline __attribute__((always_inline)) void __restore_basepri(uint32_t new
 }
 static inline __attribute__((always_inline)) void __set_control(uint32_t new_control){
     __asm__ volatile(
-            "msr control, %0    \n"
-            "isb                \n"
-            : : "r"(new_control)
-            : "memory"
-            ); 
+        "msr control, %0    \n"
+        "isb                \n"
+        : : "r"(new_control)
+        : "memory"
+    ); 
 }
 static inline __attribute__((always_inline)) uint32_t __get_control(){
     uint32_t res;
@@ -2818,10 +2835,9 @@ void bad_user_setup();
  * This function will never return
  *
  */
-
+#define BAD_RTOS_FPU_SETTINGS (FPU_FEATURE_ENABLE_LAZY_STACKING|FPU_FEATURE_ENABLE_AUTO_STACKING)
 void bad_rtos_start(){
-
-    __restore_basepri(CRITICAL_MASK);    
+    __restore_basepri(CRITICAL_MASK);
     __tcb_queue_slab_init();
 #if defined (BAD_RTOS_USE_KHEAP)
     __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER, kbitmask);
@@ -2831,6 +2847,10 @@ void bad_rtos_start(){
 #endif 
 #ifdef BAD_RTOS_USE_MPU
     __bad_rtos_mpu_default_setup();
+#endif
+#ifdef BAD_RTOS_USE_FPU
+    SCB_set_fpu_permission_level(SCB_FPU_FULL_ACCESS);
+    fpu_setup(BAD_RTOS_FPU_SETTINGS);
 #endif
     __bad_rtos_interrupt_setup();
     __bad_rtos_systick_setup();

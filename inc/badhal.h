@@ -12,6 +12,7 @@
 #define BAD_HAL_USE_RCC
 #define BAD_HAL_USE_NVIC
 #define BAD_HAL_USE_SYSTICK
+#define BAD_HAL_USE_FPU
 //Peripherals
 #define BAD_HAL_USE_USART
 #define BAD_HAL_USE_GPIO
@@ -111,17 +112,23 @@ typedef enum {
     SCB_PRIO13,
     SCB_PRIO14,
     SCB_PRIO15
-
 }SCB_interrupt_priority_t;
+
+typedef enum{
+    SCB_FPU_NO_ACCESS = 0,
+    SCB_FPU_PRIV_ACCESS = 5,
+    SCB_FPU_FULL_ACCESS = 15,
+}SCB_FPU_permission_t;
 
 #define SCB ((SCB_typedef_t *) 0xE000ED00UL)
 
-
-#define SCB_AIRCR_VECTKEY_SHIFT              16U                                            
-#define SCB_AIRCR_VECTKEY_MASK               (0xFFFF << 16)            
-#define SCB_ICSR_PENDSVSET                   (0x1 << 28 ) 
-#define SCB_AIRCR_PRIGROUP_SHIFT              8                                            
-#define SCB_AIRCR_PRIGROUP_MASK              (7 << SCB_AIRCR_PRIGROUP_SHIFT)                
+#define SCB_AIRCR_VECTKEY_SHIFT             16U                                            
+#define SCB_AIRCR_VECTKEY_MASK              (0xFFFF << 16)            
+#define SCB_ICSR_PENDSVSET                  (0x1 << 28 ) 
+#define SCB_AIRCR_PRIGROUP_SHIFT            8                                            
+#define SCB_AIRCR_PRIGROUP_MASK             (7 << SCB_AIRCR_PRIGROUP_SHIFT)                
+#define SCB_CPACR_FPU_SHIFT                 20U
+#define SCB_CPACR_FPU_MASK                  (0xF << SCB_CPACR_FPU_SHIFT)
 
 ALWAYS_INLINE void SCB_trigger_pendsv(){
     SCB->ICSR = SCB_ICSR_PENDSVSET;
@@ -139,13 +146,20 @@ ALWAYS_INLINE void SCB_set_priority_grouping(SCB_prio_grouping_t prio){
 ALWAYS_INLINE void SCB_set_core_interrupt_priority(SCB_core_interrupt_t intr,SCB_interrupt_priority_t prio){
     SCB->SHP[intr] = prio << 4;
 }
+
+ALWAYS_INLINE void SCB_set_fpu_permission_level(SCB_FPU_permission_t perms){
+    SCB->CPACR &= ~(SCB_CPACR_FPU_MASK);
+    SCB->CPACR |= perms << SCB_CPACR_FPU_SHIFT;
+    DSB;
+    ISB;
+} 
+
 #endif // BAD_HAL_USE_SCB
 
 //MPU
 #ifdef BAD_HAL_USE_MPU
 
 typedef struct {
-
     __IO uint32_t TYPE;                   
     __IO uint32_t CTRL;                   
     __IO uint32_t RNR;                    
@@ -225,11 +239,44 @@ typedef enum{
 #define MPU_BASE (0xE000ED90UL)
 
 #define MPU ((MPU_typedef_t *)MPU_BASE)
+
 ALWAYS_INLINE void mpu_enable_with_default_map(){
+    DMB;
     MPU->CTRL = MPU_CTRL_ENABLE | MPU_CTRL_DEFAULT_MAP;
+    DSB;
+    ISB;
 }
 
 #endif // BAD_HAL_USE_MPU
+
+#ifdef BAD_HAL_USE_FPU
+typedef struct{
+    __IO uint32_t FPCCR;
+    __IO uint32_t FPCAR;
+    __IO uint32_t FPDCR;
+    __IO uint32_t MVFR0;
+    __IO uint32_t MVFR1;
+}FPU_typedef_t;
+
+#define FPU_BASE (0xE000EF34)
+#define FPU ((__IO FPU_typedef_t *) FPU_BASE)
+
+typedef enum {
+    FPU_FEATURE_DISALOW_UNPRIV_CHANGE = 0,
+    FPU_FEATURE_ALLOW_UNPRIV_CHANGE = 1,
+    FPU_FEATURE_DISABLE_AUTO_STACKING = 0,
+    FPU_FEATURE_ENABLE_AUTO_STACKING = 0x80000000,
+    FPU_FEATURE_DISABLE_LAZY_STACKING = 0,
+    FPU_FEATURE_ENABLE_LAZY_STACKING = 0x40000000
+}FPU_features_t;
+
+ALWAYS_INLINE void fpu_setup( FPU_features_t features){
+    FPU->FPCCR = features;
+    DSB;
+    ISB;
+}
+
+#endif // BAD_HAL_USE_FPU
 
 //Flash
 #ifdef BAD_HAL_USE_FLASH

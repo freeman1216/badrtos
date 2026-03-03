@@ -72,15 +72,15 @@ bad_tcb_t* task2tcb;
 
 MSGQ_STATIC_INIT(task1q, 16);
 
-uint32_t sig0;
-uint32_t sig1;
-uint32_t sig2;
-uint32_t sig3;
+volatile uint32_t sig0;
+volatile uint32_t sig1;
+volatile uint32_t sig2;
+volatile uint32_t sig3;
 
 void task1(){
     while (1) {
-        bad_msg_block_t msg;
-        while(msgq_pull_msg(&task1q, &msg)){
+        bad_msg_block_t msg = {0};
+        while(msgq_pull_msg(&task1q, &msg) == BAD_QUEUE_OK){
             switch (msg.signal) {
                 case 0:{
                     sig0++;

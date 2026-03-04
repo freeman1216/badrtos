@@ -289,7 +289,7 @@ static uint32_t task_name##_stack[size/sizeof(uint32_t)] __attribute__((section(
  * @retval  bad_tcb_t* Pointer to a created task
  * @retval  NULL pointer (BAD_RTOS_ALLOC_FAIL) if tcb or stack allocation failed
  */
-extern bad_tcb_t* task_make(bad_task_descr_t* descr);
+extern bad_tcb_t* task_make(bad_task_descr_t *descr);
 
 /**
  * \b task_delay
@@ -730,7 +730,7 @@ extern bad_rtos_status_t msgq_deinit(bad_msgq_t *q,void(* free_func)(void *block
  * @retval BAD_QUEUE_BAD_PARAMETERS queue ptr or writeback ptr is null
  * @retval BAD_QUEUE_EMPTY queue is empty
  */
-extern bad_queue_status_t msgq_pull_msg(bad_msgq_t* q, bad_msg_block_t* writeback );
+extern bad_queue_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback );
 /**
  * \b msgq_post_msg
  *
@@ -749,7 +749,7 @@ extern bad_queue_status_t msgq_pull_msg(bad_msgq_t* q, bad_msg_block_t* writebac
  * @retval BAD_QUEUE_BAD_PARAMETERS queue ptr or is null
  * @retval BAD_QUEUE_OVERRUN queue is overrun
  */
-extern bad_queue_status_t msgq_post_msg(bad_msgq_t* q, uint32_t signal, void* args);
+extern bad_queue_status_t msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args);
 #endif
 
 #if defined (BAD_RTOS_USE_KHEAP)
@@ -827,7 +827,6 @@ typedef struct kernel_cb {
 
 typedef struct bitmask_slab_cb{
     uint32_t free_bitmask;
-    uint8_t capacity;
     bad_tcb_t node_arr[BAD_RTOS_MAX_TASKS];
 } tcb_bitmask_slab_t;
 
@@ -942,29 +941,31 @@ extern void __init_second_stage();
  * This function should not be called by the application
  * @param[in] tcb ptr to a task 
  */
-ALWAYS_INLINE void __task_mpu_apply_perms(bad_tcb_t* tcb){
+ALWAYS_INLINE  void __task_mpu_apply_perms(bad_tcb_t *tcb){
     MPU->RNR = 4;
     MPU->RBAR = (uint32_t)tcb->stack;
     MPU->RASR = STACK_RASR;
+    
+    const mpu_region_t * const regions = tcb->regions;
+    volatile mpu_region_t * aliases = (volatile mpu_region_t*)&MPU->RBAR_A1;
+
     switch (tcb->region_count) {
-        case 0:{
-            return;
-        }
         case 3:{
-            MPU->RBAR_A3 = tcb->regions[2].addr;
-            MPU->RASR_A3 = tcb->regions[2].rasr;
+            aliases[2].addr = regions[2].addr;
+            aliases[2].rasr = regions[2].rasr;
         }
         /*fallthrough*/
         case 2:{
-            MPU->RBAR_A2 = tcb->regions[1].addr;
-            MPU->RASR_A2 = tcb->regions[1].rasr;
+            aliases[1].addr = regions[1].addr;
+            aliases[1].rasr = regions[1].rasr;
         }
         /*fallthrough*/
         case 1:{
-            MPU->RBAR_A1 = tcb->regions[0].addr;
-            MPU->RASR_A1 = tcb->regions[0].rasr;
+            aliases[0].addr = regions[0].addr;
+            aliases[0].rasr = regions[0].rasr;
         }
     }
+   
 }
 //Linker script symbols
 extern uint8_t __kernel_bss;
@@ -1003,7 +1004,7 @@ ALWAYS_INLINE void __bad_rtos_mpu_default_setup(){
 #ifdef BAD_RTOS_USE_MSGQ
 #if defined (BAD_RTOS_USE_UHEAP) || defined (BAD_RTOS_USE_KHEAP)
 
-bad_rtos_status_t msgq_init(bad_msgq_t* q ,uint32_t size, void* (* alloc_func)(uint32_t size)){
+bad_rtos_status_t msgq_init(bad_msgq_t *q ,uint32_t size, void* (* alloc_func)(uint32_t size)){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!q||!size|| size & (size-1) || !alloc_func){
@@ -1046,7 +1047,7 @@ bad_rtos_status_t msgq_deinit(bad_msgq_t *q,void(* free_func)(void* block,uint32
 }
 #endif
 
-bad_queue_status_t msgq_pull_msg(bad_msgq_t* q, bad_msg_block_t* writeback ){
+bad_queue_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback ){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!q || !writeback){
@@ -1075,7 +1076,7 @@ bad_queue_status_t msgq_pull_msg(bad_msgq_t* q, bad_msg_block_t* writeback ){
 }
 
 
-bad_queue_status_t msgq_post_msg(bad_msgq_t* q, uint32_t signal, void* args){
+bad_queue_status_t msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args){
     uint32_t head,next_head;
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
@@ -1127,8 +1128,15 @@ bad_queue_status_t msgq_post_msg(bad_msgq_t* q, uint32_t signal, void* args){
  * @param[in] free_block_t** pointer to allocated free list
  * @param[in] uint32_t minimal order of allocation
  * @param[in] uint32_t maximum order of allocation (heap size)
+ * @param[in] uint32_t* pointer to bitmask array
  */
-void  __buddy_init(buddy_t* cb,uint8_t* heap, free_block_t* freelist,uint32_t min_order, uint32_t max_order, uint32_t* bmask){
+void  __buddy_init(buddy_t *cb,
+        uint8_t *heap, 
+        free_block_t *freelist,
+        uint32_t min_order, 
+        uint32_t max_order, 
+        uint32_t *bmask)
+{
     cb->min_order = min_order;
     cb->max_order = max_order;
     cb->heap = heap;
@@ -1179,7 +1187,7 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
     cb->free_list[picked_idx].next = cb->free_list[picked_idx].next->next;
     cb->free_list[picked_idx].next->prev = &cb->free_list[picked_idx];
     uint32_t splited_block_size = 1 << (cb->max_order - picked_idx-1);
-    free_block_t* unused_block;
+    free_block_t *unused_block;
     uint32_t bmaskidx, bmask_word, bmask_bit,offset_from_base;
         
     if(picked_idx){
@@ -1221,7 +1229,7 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
  * @param[in] uint32_t order of allocation
  *
  */
-static void __buddy_free(buddy_t* cb,void* block,uint32_t order ){
+static void __buddy_free(buddy_t *cb,void *block,uint32_t order ){
     
     if(order < cb->min_order || order > cb->max_order){
         return;
@@ -1283,7 +1291,7 @@ static void __buddy_free(buddy_t* cb,void* block,uint32_t order ){
  *
  */
 
-ALWAYS_INLINE void * __kernel_alloc(uint32_t size){
+ALWAYS_INLINE void* __kernel_alloc(uint32_t size){
     uint32_t closest_order;
     closest_order = 32 -__builtin_clz(size) - !(size & (size-1));
     if(closest_order < kernel_buddy.min_order){
@@ -1302,7 +1310,7 @@ ALWAYS_INLINE void * __kernel_alloc(uint32_t size){
  * @param[in] uint32_t size of allocation
  *
  */
-ALWAYS_INLINE void __kernel_free(void * block,uint32_t size){
+ALWAYS_INLINE void __kernel_free(void *block,uint32_t size){
     uint32_t closest_order;
     closest_order = 32 -__builtin_clz(size) - !(size & (size-1));
     if(closest_order < kernel_buddy.min_order){
@@ -1335,7 +1343,7 @@ void* user_alloc(uint32_t size){
 
 }
 
-void user_free(void* block, uint32_t size){
+void user_free(void *block, uint32_t size){
     CONTEX_SWITCH_BARIER_STORE;
     uint32_t closest_order;
     uint32_t control = __get_control();
@@ -1364,7 +1372,6 @@ void user_free(void* block, uint32_t size){
  */
 ALWAYS_INLINE void __tcb_queue_slab_init(){
     tcbslab.free_bitmask = (1UL<<(BAD_RTOS_MAX_TASKS))-1;
-    tcbslab.capacity = BAD_RTOS_MAX_TASKS;
 }
 /**
  * \b __tcb_node_alloc
@@ -1381,7 +1388,6 @@ ALWAYS_INLINE bad_tcb_t* __tcb_node_alloc(){
     uint8_t block_idx = __builtin_ctz(tcbslab.free_bitmask);
     tcbslab.free_bitmask &= ~(1UL<<block_idx);
     return tcbslab.node_arr+block_idx;
-    
 }
 /**
  * \b __tcb_node_free
@@ -1390,23 +1396,13 @@ ALWAYS_INLINE bad_tcb_t* __tcb_node_alloc(){
  *
  * This function should not be called by the application
  */
-ALWAYS_INLINE void __tcb_node_free(bad_tcb_t* block){
+ALWAYS_INLINE void __tcb_node_free(bad_tcb_t *block){
 
-    if(block < tcbslab.node_arr || block >= tcbslab.node_arr+tcbslab.capacity){
+    if(block < tcbslab.node_arr || block >= tcbslab.node_arr+BAD_RTOS_MAX_TASKS){
         return;
     }
     uint8_t block_idx = block - tcbslab.node_arr;
     tcbslab.free_bitmask |= (1ULL<<block_idx); 
-}
-/**
- * \b  __tcb_bitmask_slab_clear
- *
- * Internal function that frees all nodes in global tcb bitmask slab, never called 
- *
- * This function should not be called by the application
- */
-ALWAYS_INLINE void __tcb_bitmask_slab_clear(){
-    tcbslab.free_bitmask = (1ULL<<tcbslab.capacity)-1;
 }
 
 /**
@@ -1421,8 +1417,7 @@ ALWAYS_INLINE void __tcb_bitmask_slab_clear(){
  * @param[in] bad_tcb_t* tcb to enqueue
  * @param[in] uint32_t HEAD enum value of the specifed queue 
  */
-ALWAYS_INLINE void __enqueue_by_prio(bad_tcb_t** queue,bad_tcb_t* tcb,uint32_t base_of_enum){
-
+ALWAYS_INLINE void __enqueue_by_prio(bad_tcb_t **queue,bad_tcb_t *tcb,uint32_t base_of_enum){
 
     if(!*queue){
         *queue = tcb;
@@ -1431,7 +1426,6 @@ ALWAYS_INLINE void __enqueue_by_prio(bad_tcb_t** queue,bad_tcb_t* tcb,uint32_t b
         tcb->prev = 0;
         return;
     }
-    
 
     bad_tcb_t* traverse=*queue;
     
@@ -1476,7 +1470,7 @@ ALWAYS_INLINE void __enqueue_by_prio(bad_tcb_t** queue,bad_tcb_t* tcb,uint32_t b
  * @param[in] uint32_t ablsolute delay value 
  */
 
-ALWAYS_INLINE void __delayq_enqueue( bad_tcb_t *tcb,uint32_t absolute ){
+ALWAYS_INLINE void __delayq_enqueue( bad_tcb_t *tcb,uint32_t absolute){
     if(!kernel_cb.delayq){
         kernel_cb.delayq = tcb;
         tcb->counter = absolute;
@@ -1536,7 +1530,7 @@ ALWAYS_INLINE void __delayq_enqueue( bad_tcb_t *tcb,uint32_t absolute ){
  * @param[in] bad_tcb_t* tcb to denqueue
  *
  */
-ALWAYS_INLINE bad_rtos_status_t __dequeue_delayq(bad_tcb_t* tcb){
+ALWAYS_INLINE bad_rtos_status_t __dequeue_delayq(bad_tcb_t *tcb){
     if(!kernel_cb.delayq){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -1576,7 +1570,7 @@ ALWAYS_INLINE bad_rtos_status_t __dequeue_delayq(bad_tcb_t* tcb){
  *
  * @retval bad_tcb_t* pointer to the dequeued head
  */
-ALWAYS_INLINE bad_tcb_t * __dequeue_head(bad_tcb_t** q ,uint32_t base_of_enum){
+ALWAYS_INLINE bad_tcb_t* __dequeue_head(bad_tcb_t **q ,uint32_t base_of_enum){
     bad_tcb_t *head = *q;
     if(!head){
         return 0;
@@ -1599,7 +1593,7 @@ ALWAYS_INLINE bad_tcb_t * __dequeue_head(bad_tcb_t** q ,uint32_t base_of_enum){
  *
  * @retval bad_tcb_t* pointer to the dequeued head
  */
-ALWAYS_INLINE bad_tcb_t * __dequeue_delayq_head(){
+ALWAYS_INLINE bad_tcb_t* __dequeue_delayq_head(){
     if(!kernel_cb.delayq){
         return 0;
     }
@@ -1628,7 +1622,7 @@ ALWAYS_INLINE bad_tcb_t * __dequeue_delayq_head(){
  *
  */
 
-ALWAYS_INLINE void __remove_head(bad_tcb_t** queue ,uint32_t base_of_enum){
+ALWAYS_INLINE void __remove_head(bad_tcb_t **queue ,uint32_t base_of_enum){
     bad_tcb_t *head = *queue;
     if(!head){
         return ;
@@ -1655,7 +1649,7 @@ ALWAYS_INLINE void __remove_head(bad_tcb_t** queue ,uint32_t base_of_enum){
  * @param[in] uint32_t HEAD enum value of the specifed queue 
  *
  */
-ALWAYS_INLINE void __enqueue_head(bad_tcb_t** q, bad_tcb_t * tcb,uint32_t base_of_enum){
+ALWAYS_INLINE void __enqueue_head(bad_tcb_t **q, bad_tcb_t *tcb,uint32_t base_of_enum){
     bad_tcb_t * old_head = *q;
     if(old_head){ 
         old_head->prev = tcb;
@@ -1679,7 +1673,7 @@ ALWAYS_INLINE void __enqueue_head(bad_tcb_t** q, bad_tcb_t * tcb,uint32_t base_o
  *
  * @param[in] bad_tcb_t* tcb to remove
  */
-ALWAYS_INLINE void __remove_member(bad_tcb_t* tcb){
+ALWAYS_INLINE void __remove_member(bad_tcb_t *tcb){
     tcb->prev->next = tcb->next;
     if(tcb->next){
         tcb->next->prev = tcb->prev;
@@ -1704,7 +1698,7 @@ ALWAYS_INLINE void __remove_member(bad_tcb_t* tcb){
  * @retval BAD_RTOS_STATUS_OK successfully removed the tcb from the queue
  * @retval BAD_RTOS_STATUS_WRONG_Q tcb is not in the specified queue
  */
-ALWAYS_INLINE bad_rtos_status_t __remove_entry(bad_tcb_t**q ,bad_tcb_t* tcb,uint32_t base_of_enum){
+ALWAYS_INLINE bad_rtos_status_t __remove_entry(bad_tcb_t **q ,bad_tcb_t *tcb,uint32_t base_of_enum){
     uint32_t offset_from_base = tcb->misc - base_of_enum;
     switch (offset_from_base) {
         case 0:{
@@ -1786,7 +1780,7 @@ ALWAYS_INLINE void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
  * @param[in] bad_tcb_t* tcb to run
  *
  */
-ALWAYS_INLINE void __sched_update(bad_tcb_t* tcb){
+ALWAYS_INLINE void __sched_update(bad_tcb_t *tcb){
     next = tcb;
     tcb->misc = BAD_RTOS_MISC_RUNNING;
 #ifdef BAD_RTOS_USE_MPU
@@ -1832,7 +1826,7 @@ ALWAYS_INLINE void __sched_try_update(){
  * The tcb running should not be in any queue
  *
  */
-ALWAYS_INLINE void __sched_try_preempt(bad_tcb_t* tcb){
+ALWAYS_INLINE void __sched_try_preempt(bad_tcb_t *tcb){
     if(next){
         if(tcb->raised_priority < next->raised_priority){
             __enqueue_by_prio(&kernel_cb.readyq, next, BAD_RTOS_MISC_READYQ_HEAD);
@@ -1872,7 +1866,7 @@ ALWAYS_INLINE void __handle_systick_event(BAD_SYSTICK_STATUS status){
         case BAD_SYSTICK_DELAY_WAKE_PENDING:{
             bad_tcb_t *wake_list = 0;
             do{ 
-                bad_tcb_t* wake = __dequeue_delayq_head();
+                bad_tcb_t *wake = __dequeue_delayq_head();
              
                 if(wake->cbptr){
                     wake->cbptr(wake,wake->args);
@@ -1890,7 +1884,7 @@ ALWAYS_INLINE void __handle_systick_event(BAD_SYSTICK_STATUS status){
         case BAD_SYSTICK_BOTH:{
             bad_tcb_t *wake_list = 0;
             do{ 
-                bad_tcb_t* wake = __dequeue_delayq_head();
+                bad_tcb_t *wake = __dequeue_delayq_head();
 
                 if(wake->cbptr){
                     wake->cbptr(wake,wake->args);
@@ -1931,7 +1925,7 @@ ALWAYS_INLINE void __handle_systick_event(BAD_SYSTICK_STATUS status){
  * This function should not be called by the application
  *
  */
-ALWAYS_INLINE uint32_t * __init_stack(void (*task)(), uint32_t* stacktop,void * args){
+ALWAYS_INLINE uint32_t * __init_stack(void (*task)(), uint32_t *stacktop,void *args){
     *--stacktop = 0x01000000UL;     // xPSR (Thumb bit set)
     *--stacktop = (uint32_t)task|0x1;   // PC
     *--stacktop = 0xFFFFFFFDUL;     // LR = EXC_RETURN (thread mode + PSP)
@@ -1948,7 +1942,7 @@ ALWAYS_INLINE uint32_t * __init_stack(void (*task)(), uint32_t* stacktop,void * 
 }
 
 
-ALWAYS_INLINE bad_tcb_t* __task_make(bad_task_descr_t* args){
+ALWAYS_INLINE bad_tcb_t* __task_make(bad_task_descr_t *args){
     bad_tcb_t* new_task = __tcb_node_alloc();
     if(!new_task){
         return (bad_tcb_t*)BAD_RTOS_STATUS_ALLOC_FAIL; //shut up warning, its zero
@@ -1991,7 +1985,7 @@ ALWAYS_INLINE bad_tcb_t* __task_make(bad_task_descr_t* args){
 
 
 
-ALWAYS_INLINE bad_rtos_status_t __task_unblock(bad_tcb_t* tcb){
+ALWAYS_INLINE bad_rtos_status_t __task_unblock(bad_tcb_t *tcb){
     if(__remove_entry(&kernel_cb.blockedq, tcb, BAD_RTOS_MISC_BLOCKEDQ_HEAD)!= BAD_RTOS_STATUS_OK){
         return BAD_RTOS_STATUS_NOT_BLOCKED;
     }
@@ -1999,7 +1993,7 @@ ALWAYS_INLINE bad_rtos_status_t __task_unblock(bad_tcb_t* tcb){
     return BAD_RTOS_STATUS_OK;
 }
 
-ALWAYS_INLINE bad_rtos_status_t __task_delay_cancel(bad_tcb_t* tcb){
+ALWAYS_INLINE bad_rtos_status_t __task_delay_cancel(bad_tcb_t *tcb){
     if(__dequeue_delayq(tcb)!= BAD_RTOS_STATUS_OK){
         return BAD_RTOS_STATUS_NOT_DELAYED;
     }
@@ -2023,7 +2017,7 @@ ALWAYS_INLINE bad_rtos_status_t __task_yield(){
 }
 
 #ifdef BAD_RTOS_USE_MUTEX
-bad_rtos_status_t mutex_init(bad_mutex_t* mut){
+bad_rtos_status_t mutex_init(bad_mutex_t *mut){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!mut){
@@ -2044,13 +2038,13 @@ bad_rtos_status_t mutex_init(bad_mutex_t* mut){
  * This function should not be called by the application
  *
  */
-ALWAYS_INLINE void __mutex_timeout_cb(bad_tcb_t* tcb ,void * mutex){
+ALWAYS_INLINE void __mutex_timeout_cb(bad_tcb_t *tcb ,void *mutex){
     bad_mutex_t * mut = (bad_mutex_t* ) mutex;
     __remove_entry(&mut->blockedq,tcb,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD);
     *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
-ALWAYS_INLINE bad_rtos_status_t __mutex_delete(bad_mutex_t* mut){
+ALWAYS_INLINE bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
     if(!mut){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -2088,7 +2082,7 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_delete(bad_mutex_t* mut){
     return BAD_RTOS_STATUS_OK;
 }
 
-ALWAYS_INLINE bad_rtos_status_t __mutex_take(bad_mutex_t* mut, uint32_t delay){
+ALWAYS_INLINE bad_rtos_status_t __mutex_take(bad_mutex_t *mut, uint32_t delay){
     if(!mut){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -2122,7 +2116,7 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_take(bad_mutex_t* mut, uint32_t delay){
 }   
 
 
-ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t* mut){
+ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
     if(!mut){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -2143,9 +2137,9 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t* mut){
     }
 
     if(mut->owner->cbptr == __mutex_timeout_cb){
-            mut->owner->cbptr = 0;
-            mut->owner->args = 0;
-            __dequeue_delayq(mut->owner);
+        mut->owner->cbptr = 0;
+        mut->owner->args = 0;
+        __dequeue_delayq(mut->owner);
     }
          
     *(mut->owner->sp+8) = BAD_RTOS_STATUS_OK;
@@ -2158,7 +2152,7 @@ ALWAYS_INLINE bad_rtos_status_t __mutex_put(bad_mutex_t* mut){
 
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value){
+bad_rtos_status_t sem_init(bad_sem_t *sem,uint16_t reset_value){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!sem){
@@ -2181,13 +2175,13 @@ bad_rtos_status_t sem_init(bad_sem_t* sem,uint16_t reset_value){
  * This function should not be called by the application
  *
  */
-ALWAYS_INLINE void __sem_timeout_cb(bad_tcb_t* tcb ,void * semaphore){
+ALWAYS_INLINE void __sem_timeout_cb(bad_tcb_t *tcb ,void *semaphore){
     bad_sem_t *sem = (bad_sem_t* ) semaphore;
     __remove_entry(&sem->blockedq,tcb,BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD);
     *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
-ALWAYS_INLINE bad_rtos_status_t __sem_delete(bad_sem_t* sem){
+ALWAYS_INLINE bad_rtos_status_t __sem_delete(bad_sem_t *sem){
     if(!sem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -2223,7 +2217,7 @@ ALWAYS_INLINE bad_rtos_status_t __sem_delete(bad_sem_t* sem){
     return BAD_RTOS_STATUS_OK;
 }
 
-ALWAYS_INLINE bad_rtos_status_t __sem_take(bad_sem_t* sem, uint32_t delay){
+ALWAYS_INLINE bad_rtos_status_t __sem_take(bad_sem_t *sem, uint32_t delay){
     if(!sem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -2251,7 +2245,7 @@ ALWAYS_INLINE bad_rtos_status_t __sem_take(bad_sem_t* sem, uint32_t delay){
 }   
 
 
-ALWAYS_INLINE bad_rtos_status_t __sem_put(bad_sem_t* sem){
+ALWAYS_INLINE bad_rtos_status_t __sem_put(bad_sem_t *sem){
     if(!sem){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -2277,7 +2271,7 @@ ALWAYS_INLINE bad_rtos_status_t __sem_put(bad_sem_t* sem){
     return BAD_RTOS_STATUS_OK;
 }
 // you dont need to call this if you initialise it yourself on .data 
-bad_rtos_status_t nbsem_init(bad_nbsem_t * nbsem,uint32_t reset_value){ 
+bad_rtos_status_t nbsem_init(bad_nbsem_t *nbsem, uint32_t reset_value){ 
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!nbsem){
@@ -2290,7 +2284,7 @@ bad_rtos_status_t nbsem_init(bad_nbsem_t * nbsem,uint32_t reset_value){
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t nbsem_take(bad_nbsem_t* nbsem){
+bad_rtos_status_t nbsem_take(bad_nbsem_t *nbsem){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!nbsem){
@@ -2319,7 +2313,7 @@ bad_rtos_status_t nbsem_take(bad_nbsem_t* nbsem){
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t nbsem_put(bad_nbsem_t* nbsem){
+bad_rtos_status_t nbsem_put(bad_nbsem_t *nbsem){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!nbsem){
@@ -2343,7 +2337,7 @@ bad_rtos_status_t nbsem_put(bad_nbsem_t* nbsem){
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t nbsem_delete(bad_nbsem_t * nbsem){
+bad_rtos_status_t nbsem_delete(bad_nbsem_t *nbsem){
     CONTEX_SWITCH_BARIER_STORE;
     CONTEX_SWITCH_BARIER;
     if(!nbsem){

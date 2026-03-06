@@ -1929,7 +1929,7 @@ ALWAYS_STATIC bad_tcb_t* __task_make(bad_task_descr_t *args){
     new_task->dyn_stack = args->dyn_stack;
     if(args->dyn_stack){
 #ifdef BAD_RTOS_USE_MPU
-        if(args->stack_size < 64){
+        if(args->stack_size < 128){
              return (bad_tcb_t*)BAD_RTOS_STATUS_ALLOC_FAIL;
         }
 #endif
@@ -1943,7 +1943,11 @@ ALWAYS_STATIC bad_tcb_t* __task_make(bad_task_descr_t *args){
     new_task->stack = args->stack;
 #endif
 #ifdef BAD_RTOS_USE_MPU
-    new_task->regions = args->regions;
+    if(!args->regions){
+        new_task->regions = zeroed_regions;
+    }else{
+        new_task->regions = args->regions;
+    }
 #endif 
     new_task->stack_size = args->stack_size;
     new_task->ticks_to_change = args->ticks_to_change;
@@ -2629,7 +2633,6 @@ void __attribute__((naked)) systick_isr(){
 #ifdef BAD_RTOS_USE_MPU
 static inline __attribute__((always_inline)) void __task_mpu_apply_perms(bad_tcb_t *tcb) {
     void* rbar_ptr = (void*)&MPU->RBAR;
-    void* zero_regs = (void*)zeroed_regions;
 
     __asm__ volatile( 
         "ldr   r2, [%1, #4]           \n" 
@@ -2637,9 +2640,6 @@ static inline __attribute__((always_inline)) void __task_mpu_apply_perms(bad_tcb
         "stmia %0!, {r2, %2}          \n" 
         
         "ldr   r0, [%1, #48]          \n" 
-        "cmp   r0, #0                 \n" 
-        "it    eq                     \n" 
-        "moveq r0, %3                 \n" 
         
         "ldmia r0!, {r2, r3}          \n" 
         "stmia %0!, {r2, r3}          \n" 
@@ -2650,8 +2650,7 @@ static inline __attribute__((always_inline)) void __task_mpu_apply_perms(bad_tcb
         
         : "+r" (rbar_ptr)                 // %0
         : "r" (tcb),                      // %1
-          "r" (STACK_RASR),               // %2
-          "r" (zero_regs)                 // %3
+          "r" (STACK_RASR)               // %2
         : "r0", "r2", "r3", "cc", "memory" 
     );
 }

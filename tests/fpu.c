@@ -1,3 +1,4 @@
+#include <math.h>
 #define BAD_PLLM (25)
 #define BAD_PLLN (400)
 #define BAD_PLLQ (10)
@@ -42,50 +43,27 @@ static inline void __periph_setup(){
     rcc_set_apb2_clocking(BAD_RTOS_APB2_PERIPHERALS);
 }
 
+
+
 START_TASK_MPU_REGIONS_DEFINITIONS(task1)
     DEFINE_PERIPH_ACCESS_REGION(task1,USART1_BASE, sizeof(USART_typedef_t))
 END_TASK_MPU_REGIONS(task1)
 
 bad_tcb_t* task1tcb;
 bad_tcb_t* task2tcb;
-bad_nbsem_t sem ;
+
 void task1(){
+    volatile float_t f = 1;
     while (1) {
-        nbsem_take(&sem);
+        f *= 1.75;
         task_yield();
-        nbsem_put(&sem);
-        task_yield();
-        while (1) {
-            if(nbsem_delete(&sem) == BAD_RTOS_STATUS_OK){
-                task_finish();
-            }else{
-                task_yield();
-            }
-        }
     }
 }
 
 void task2(){
+    volatile float_t f = 1;
     while (1) {
-        bad_rtos_status_t status;
-        status = nbsem_take(&sem);
-        if(status != BAD_RTOS_STATUS_OK){
-            task_finish();
-        }
-        task_yield();
-        nbsem_put(&sem);
-        task_yield();
-    }
-}
-void task3(){
-    while (1) {
-        bad_rtos_status_t status;
-        status = nbsem_take(&sem);
-        if(status != BAD_RTOS_STATUS_OK){
-            task_finish();
-        }
-        task_yield();
-        nbsem_put(&sem);
+        f *= 2.25;
         task_yield();
     }
 }
@@ -93,12 +71,9 @@ void task3(){
 
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 1
-#define TASK3_PRIORITY 1
-#define TASK1_STACK_SIZE 1024
 #define TASK2_STACK_SIZE 1024
-#define TASK3_STACK_SIZE 1024
+#define TASK1_STACK_SIZE 1024
 TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
-TASK_STATIC_STACK(task3, TASK2_STACK_SIZE);
 void bad_user_setup(){
     bad_task_descr_t task1_descr = {
         .stack = 0,
@@ -106,7 +81,7 @@ void bad_user_setup(){
         .dyn_stack = 1,
         .entry = task1,
         .regions = task1_regions,
-        .ticks_to_change = 500,
+        .ticks_to_change = 1000,
         .base_priority = TASK1_PRIORITY
     };
     task1tcb = task_make(&task1_descr);
@@ -114,19 +89,10 @@ void bad_user_setup(){
         .stack = task2_stack,
         .stack_size = TASK2_STACK_SIZE,
         .entry = task2,
-        .ticks_to_change = 500,
+        .ticks_to_change = 1000,
         .base_priority = TASK2_PRIORITY
     };
     task2tcb = task_make(&task2_descr);
-    bad_task_descr_t task3_descr = {
-        .stack = task3_stack,
-        .stack_size = TASK3_STACK_SIZE,
-        .entry = task3,
-        .ticks_to_change = 500,
-        .base_priority = TASK3_PRIORITY
-    };
-    task2tcb = task_make(&task3_descr);
-    nbsem_init(&sem, 2);
 }
 
 

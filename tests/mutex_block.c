@@ -43,7 +43,7 @@ static inline void __periph_setup(){
 }
 
 START_TASK_MPU_REGIONS_DEFINITIONS(task1)
-    DEFINE_PERIPH_ACCESS_REGION(USART1_BASE, sizeof(USART_typedef_t))
+    DEFINE_PERIPH_ACCESS_REGION(task1,USART1_BASE, sizeof(USART_typedef_t))
 END_TASK_MPU_REGIONS(task1)
 
 bad_tcb_t* task1tcb;
@@ -80,7 +80,6 @@ void bad_user_setup(){
         .dyn_stack = 1,
         .entry = task1,
         .regions = task1_regions,
-        .region_count = MPU_REGIONS_SIZE(task1),
         .ticks_to_change = 500,
         .base_priority = TASK1_PRIORITY
     };

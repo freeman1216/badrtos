@@ -36,7 +36,7 @@
 #define DEFAULT_USER_ISR(x,...) void x##_default(__VA_ARGS__)
 #define WEAK_PERIPH_USER_ISR(x,default_isr,...) void x(__VA_ARGS__) __attribute__((weak, alias(#default_isr"_default")))
 #define ATTR_RAMFUNC __attribute__((section(".ramfunc")))
-#define ALWAYS_INLINE static inline
+#define ALWAYS_STATIC static inline
 #define UNUSED(x) (void)x
 
 #define OPT_BARRIER asm volatile("": : :"memory")
@@ -130,11 +130,11 @@ typedef enum{
 #define SCB_CPACR_FPU_SHIFT                 20U
 #define SCB_CPACR_FPU_MASK                  (0xF << SCB_CPACR_FPU_SHIFT)
 
-ALWAYS_INLINE void SCB_trigger_pendsv(){
+ALWAYS_STATIC void SCB_trigger_pendsv(){
     SCB->ICSR = SCB_ICSR_PENDSVSET;
 }
 
-ALWAYS_INLINE void SCB_set_priority_grouping(SCB_prio_grouping_t prio){
+ALWAYS_STATIC void SCB_set_priority_grouping(SCB_prio_grouping_t prio){
     uint32_t reg_value  =  SCB->AIRCR;                                                
     reg_value &= ~(SCB_AIRCR_VECTKEY_MASK | SCB_AIRCR_PRIGROUP_MASK);  
     reg_value  =  (reg_value | (0x5FA << SCB_AIRCR_VECTKEY_SHIFT) | (prio << SCB_AIRCR_PRIGROUP_SHIFT));              
@@ -143,11 +143,11 @@ ALWAYS_INLINE void SCB_set_priority_grouping(SCB_prio_grouping_t prio){
     OPT_BARRIER;
 }
 
-ALWAYS_INLINE void SCB_set_core_interrupt_priority(SCB_core_interrupt_t intr,SCB_interrupt_priority_t prio){
+ALWAYS_STATIC void SCB_set_core_interrupt_priority(SCB_core_interrupt_t intr,SCB_interrupt_priority_t prio){
     SCB->SHP[intr] = prio << 4;
 }
 
-ALWAYS_INLINE void SCB_set_fpu_permission_level(SCB_FPU_permission_t perms){
+ALWAYS_STATIC void SCB_set_fpu_permission_level(SCB_FPU_permission_t perms){
     SCB->CPACR &= ~(SCB_CPACR_FPU_MASK);
     SCB->CPACR |= perms << SCB_CPACR_FPU_SHIFT;
     DSB;
@@ -240,7 +240,7 @@ typedef enum{
 
 #define MPU ((MPU_typedef_t *)MPU_BASE)
 
-ALWAYS_INLINE void mpu_enable_with_default_map(){
+ALWAYS_STATIC void mpu_enable_with_default_map(){
     DMB;
     MPU->CTRL = MPU_CTRL_ENABLE | MPU_CTRL_DEFAULT_MAP;
     DSB;
@@ -270,7 +270,7 @@ typedef enum {
     FPU_FEATURE_ENABLE_LAZY_STACKING = 0x40000000
 }FPU_features_t;
 
-ALWAYS_INLINE void fpu_setup( FPU_features_t features){
+ALWAYS_STATIC void fpu_setup( FPU_features_t features){
     FPU->FPCCR = features;
     DSB;
     ISB;
@@ -491,7 +491,7 @@ typedef enum{
 #define RCC_BASE (0x40023800UL)
 #define RCC ((__IO RCC_typedef_t *)RCC_BASE)
 
-ALWAYS_INLINE void rcc_enable_hsi(void) {
+ALWAYS_STATIC void rcc_enable_hsi(void) {
     RCC->CR |= HSION_MASK;
     while (!(RCC->CR & HSIRDY_MASK));
 }
@@ -504,28 +504,28 @@ extern void rcc_fallback_to_hsi(){
 
 }
 
-ALWAYS_INLINE void rcc_enable_hse(void) {
+ALWAYS_STATIC void rcc_enable_hse(void) {
     RCC->CR |= HSEON_MASK;
     while (!(RCC->CR & HSERDY_MASK));
 }
 
-ALWAYS_INLINE void rcc_set_ahb1_clocking(RCC_AHB1_peripherals_t ahb1_mask){
+ALWAYS_STATIC void rcc_set_ahb1_clocking(RCC_AHB1_peripherals_t ahb1_mask){
     RCC->AHB1ENR = ahb1_mask;
 }
 
-ALWAYS_INLINE void rcc_set_ahb2_clocking(RCC_AHB2_peripherals_t ahb2_mask){
+ALWAYS_STATIC void rcc_set_ahb2_clocking(RCC_AHB2_peripherals_t ahb2_mask){
     RCC->AHB2ENR = ahb2_mask;
 }
 
-ALWAYS_INLINE void rcc_set_apb1_clocking(RCC_APB1_peripherals_t apb1_mask){
+ALWAYS_STATIC void rcc_set_apb1_clocking(RCC_APB1_peripherals_t apb1_mask){
     RCC->APB1ENR = apb1_mask;
 }
 
-ALWAYS_INLINE void rcc_set_apb2_clocking(RCC_APB2_peripherals_t apb2_mask){
+ALWAYS_STATIC void rcc_set_apb2_clocking(RCC_APB2_peripherals_t apb2_mask){
     RCC->APB2ENR = apb2_mask;
 }
 
-ALWAYS_INLINE void rcc_enable_and_switch_to_pll(){
+ALWAYS_STATIC void rcc_enable_and_switch_to_pll(){
     RCC->CR |= PLLON_MASK;
     while (!(RCC->CR & PLLRDY_MASK));
     RCC->CFGR &= ~(SW_MASK);
@@ -533,14 +533,14 @@ ALWAYS_INLINE void rcc_enable_and_switch_to_pll(){
     while ((RCC->CFGR & SWS_MASK)  != SW_PLL<<2);// SWS repots same bits as SW just 2 bits farther
 }
 
-ALWAYS_INLINE void rcc_bus_prescalers_setup(HPRE_state_t ahb_prescaler,PPRE_state_t apb1_prescaler,
+ALWAYS_STATIC void rcc_bus_prescalers_setup(HPRE_state_t ahb_prescaler,PPRE_state_t apb1_prescaler,
     PPRE_state_t apb2_prescaler)
 {
     RCC->CFGR &= ~(PPRE1_MASK | PPRE2_MASK | HPRE_MASK);
     RCC->CFGR |= PPRE1_SET(apb1_prescaler) | PPRE2_SET(apb2_prescaler) | HPRE_SET(ahb_prescaler);
 }
 
-ALWAYS_INLINE void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,uint8_t PLLQ, PLL_source_t source){
+ALWAYS_STATIC void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,uint8_t PLLQ, PLL_source_t source){
     
     if(!(RCC->CR & HSION_MASK) && source == PLL_SOURCE_HSI){
         rcc_enable_hsi();
@@ -674,7 +674,7 @@ typedef struct
 #define NVIC ((NVIC_typedef_t*) NVIC_BASE)
 
 
-ALWAYS_INLINE void nvic_enable_interrupt(NVIC_programmable_intr_t intrnum)
+ALWAYS_STATIC void nvic_enable_interrupt(NVIC_programmable_intr_t intrnum)
 {
     uint8_t ISER_idx = intrnum >> 5; //deside the register by dividing by 32 
     uint32_t ISER_intr_mask = 1 << (intrnum & 0x1F); // the remainder will be the bit number to which we should write
@@ -685,7 +685,7 @@ ALWAYS_INLINE void nvic_enable_interrupt(NVIC_programmable_intr_t intrnum)
    
 }
 
-ALWAYS_INLINE void nvic_disable_interrupt(NVIC_programmable_intr_t intrnum)
+ALWAYS_STATIC void nvic_disable_interrupt(NVIC_programmable_intr_t intrnum)
 {
     uint8_t ICER_idx = intrnum >> 5;
     uint32_t ICER_intr_mask = 1 << (intrnum & 0x1F);
@@ -695,7 +695,7 @@ ALWAYS_INLINE void nvic_disable_interrupt(NVIC_programmable_intr_t intrnum)
     OPT_BARRIER;
 } 
 
-ALWAYS_INLINE void nvic_set_interrupt_priority(NVIC_programmable_intr_t intrnum, NVIC_prio_t prio){
+ALWAYS_STATIC void nvic_set_interrupt_priority(NVIC_programmable_intr_t intrnum, NVIC_prio_t prio){
     NVIC->IP[intrnum] = prio << 4;
     DSB;
     OPT_BARRIER;
@@ -724,17 +724,17 @@ typedef enum{
     SYSTICK_FEATURE_CLOCK_SOURCE = 0x4,
 }SYSTICK_features_t;
 
-ALWAYS_INLINE void systick_setup(uint32_t reload_value,SYSTICK_features_t features){
+ALWAYS_STATIC void systick_setup(uint32_t reload_value,SYSTICK_features_t features){
     SYSTICK->LOAD = reload_value-1;
     SYSTICK->CTRL = features;
     SYSTICK->VAL = 0;
 }
 
-ALWAYS_INLINE void systick_enable(){
+ALWAYS_STATIC void systick_enable(){
     SYSTICK->CTRL |= SysTick_CTRL_ENABLE;
 }
 
-ALWAYS_INLINE void systick_disable(){
+ALWAYS_STATIC void systick_disable(){
     SYSTICK->CTRL &= ~(SysTick_CTRL_ENABLE);
 }
 
@@ -747,7 +747,7 @@ ALWAYS_INLINE void systick_disable(){
 
 #ifndef BAD_USART_DEF
 #ifdef BAD_USART_STATIC
-    #define BAD_USART_DEF ALWAYS_INLINE
+    #define BAD_USART_DEF ALWAYS_STATIC
 #else
     #define BAD_USART_DEF extern
 #endif
@@ -821,19 +821,19 @@ typedef enum{
 }USART_misc_t;
 
 
-ALWAYS_INLINE void uart_enable_misc(__IO USART_typedef_t * USART , USART_misc_t misc){
+ALWAYS_STATIC void uart_enable_misc(__IO USART_typedef_t * USART , USART_misc_t misc){
     USART->CR3 |= misc;
 }
 
-ALWAYS_INLINE void uart_disable_misc(__IO USART_typedef_t * USART ,USART_misc_t misc){
+ALWAYS_STATIC void uart_disable_misc(__IO USART_typedef_t * USART ,USART_misc_t misc){
     USART->CR3 &= ~(misc);
 }
 
-ALWAYS_INLINE void uart_enable_interrupts(__IO USART_typedef_t * USART,USART_interrupt_flags_t interrupts){
+ALWAYS_STATIC void uart_enable_interrupts(__IO USART_typedef_t * USART,USART_interrupt_flags_t interrupts){
     USART->CR1 |= interrupts;
 }
 
-ALWAYS_INLINE void uart_disable_interrupts(__IO USART_typedef_t * USART,USART_interrupt_flags_t interrupts){
+ALWAYS_STATIC void uart_disable_interrupts(__IO USART_typedef_t * USART,USART_interrupt_flags_t interrupts){
     USART->CR1 &= ~(interrupts);
 }
 BAD_USART_DEF void uart_enable(__IO USART_typedef_t* USART);
@@ -945,11 +945,11 @@ typedef struct{
 #define BSSRx_BR(x)     (1<<(x + 16))
 #define BSSRx_BS(x)     (1 << x)
 
-ALWAYS_INLINE void io_pin_set(volatile GPIO_typedef_t *GPIO, uint8_t pin_num){
+ALWAYS_STATIC void io_pin_set(volatile GPIO_typedef_t *GPIO, uint8_t pin_num){
     GPIO->BSRR = BSSRx_BS(pin_num);
 }
 
-ALWAYS_INLINE void io_pin_reset(volatile GPIO_typedef_t *GPIO, uint8_t pin_num){
+ALWAYS_STATIC void io_pin_reset(volatile GPIO_typedef_t *GPIO, uint8_t pin_num){
     GPIO->BSRR = BSSRx_BR(pin_num);
 }
 
@@ -1025,7 +1025,7 @@ extern inline void io_setup_pin(__IO GPIO_typedef_t *GPIO, uint8_t pin_num, MODE
 #ifdef BAD_HAL_USE_SPI
 
 #ifdef BAD_SPI_STATIC
-    #define BAD_SPI_DEF ALWAYS_INLINE
+    #define BAD_SPI_DEF ALWAYS_STATIC
 #else
     #define BAD_SPI_DEF extern
 #endif
@@ -1092,23 +1092,23 @@ typedef enum{
 #define SPI_SR_RXNE_MASK    (0x1)
 #define SPI_SR_TXE_MASK     (0x2)
 
-ALWAYS_INLINE void spi_enable_interrupts(__IO SPI_typedef_t* SPI,SPI_interrupt_t interrupts){
+ALWAYS_STATIC void spi_enable_interrupts(__IO SPI_typedef_t* SPI,SPI_interrupt_t interrupts){
     SPI->CR2 |= interrupts;
 }
 
-ALWAYS_INLINE void spi_disable_interrupts(__IO SPI_typedef_t* SPI,SPI_interrupt_t interrupts){
+ALWAYS_STATIC void spi_disable_interrupts(__IO SPI_typedef_t* SPI,SPI_interrupt_t interrupts){
     SPI->CR2 &= ~(interrupts);
 }
 
-ALWAYS_INLINE void spi_enable_misc(__IO SPI_typedef_t* SPI, SPI_misc_t misc){ //call this only when spi is disabled
+ALWAYS_STATIC void spi_enable_misc(__IO SPI_typedef_t* SPI, SPI_misc_t misc){ //call this only when spi is disabled
     SPI->CR2 |= misc;
 }
 
-ALWAYS_INLINE void spi_disable_misc(__IO SPI_typedef_t* SPI, SPI_misc_t misc){ //call this only when spi is disabled
+ALWAYS_STATIC void spi_disable_misc(__IO SPI_typedef_t* SPI, SPI_misc_t misc){ //call this only when spi is disabled
     SPI->CR2 &= ~misc;
 }
 
-ALWAYS_INLINE void spi_setup(__IO SPI_typedef_t* SPI, SPI_feature_t features,SPI_misc_t misc, SPI_interrupt_t interrupts){
+ALWAYS_STATIC void spi_setup(__IO SPI_typedef_t* SPI, SPI_feature_t features,SPI_misc_t misc, SPI_interrupt_t interrupts){
     SPI->CR1 = features;
     SPI->CR2 = misc | interrupts;
 }
@@ -1262,7 +1262,7 @@ typedef enum{
 
 #define CR_EN_MASK  (0x1)
 
-ALWAYS_INLINE void dma_clear_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream, DMA_clear_interrupts_t interrupts){
+ALWAYS_STATIC void dma_clear_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream, DMA_clear_interrupts_t interrupts){
     static const uint32_t shift[4] = {
         0,
         6,
@@ -1278,18 +1278,18 @@ ALWAYS_INLINE void dma_clear_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_
     }
 }
 
-ALWAYS_INLINE uint8_t dma_stream_n_poll_ready(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream){
+ALWAYS_STATIC uint8_t dma_stream_n_poll_ready(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream){
     return DMA->streams[stream].NDTR == 0;
 }
 
-ALWAYS_INLINE void dma_enable_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream,DMA_interrupts_t interrupts){
+ALWAYS_STATIC void dma_enable_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream,DMA_interrupts_t interrupts){
     DMA->streams[stream].CR |= interrupts;
 }
-ALWAYS_INLINE void dma_disable_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream, DMA_interrupts_t interrupts){
+ALWAYS_STATIC void dma_disable_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_t stream, DMA_interrupts_t interrupts){
     DMA->streams[stream].CR &= ~(interrupts);
 }
 
-ALWAYS_INLINE void dma_start_transfer(__IO DMA_typedef_t * DMA, DMA_stream_num_t stream){
+ALWAYS_STATIC void dma_start_transfer(__IO DMA_typedef_t * DMA, DMA_stream_num_t stream){
     DMA->streams[stream].CR |= CR_EN_MASK;
 }
 
@@ -1394,7 +1394,7 @@ typedef enum{
 
 #define SYSCFG ((__IO SYSCFG_typedef_t *)SYSCFG_BASE)
 
-ALWAYS_INLINE void syscfg_set_exti_pin(SYSCFG_EXTI_port_t port, uint8_t pin){
+ALWAYS_STATIC void syscfg_set_exti_pin(SYSCFG_EXTI_port_t port, uint8_t pin){
     uint8_t crnum = pin >> 2;
     uint8_t shift = (pin & 0x3) << 2;
 
@@ -1409,7 +1409,7 @@ ALWAYS_INLINE void syscfg_set_exti_pin(SYSCFG_EXTI_port_t port, uint8_t pin){
 
 #ifndef BAD_TIMER_DEF
 #ifdef BAD_TIMER_STATIC
-    #define BAD_TIMER_DEF ALWAYS_INLINE
+    #define BAD_TIMER_DEF ALWAYS_STATIC
 #else
     #define BAD_TIMER_DEF extern
 #endif
@@ -1442,11 +1442,11 @@ typedef enum{
 
 #define TIM_CR_CEN 0x1
 
-ALWAYS_INLINE void tim_enable(__IO BTIMER_typedef_t* TIM){
+ALWAYS_STATIC void tim_enable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 |= TIM_CR_CEN; 
 }
 
-ALWAYS_INLINE void tim_disable(__IO BTIMER_typedef_t* TIM){
+ALWAYS_STATIC void tim_disable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 &= ~TIM_CR_CEN;
 }
 
@@ -1476,7 +1476,7 @@ typedef struct {
 
 #define CRC_CR_RESET 0x1
 
-ALWAYS_INLINE void crc_reset(){
+ALWAYS_STATIC void crc_reset(){
     CRC->CR = CRC_CR_RESET;
 }
 

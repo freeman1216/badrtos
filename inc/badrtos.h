@@ -1139,7 +1139,7 @@ void  __buddy_init(buddy_t *cb,
  * @retval void* allocated block
  */
 static void* __buddy_alloc(buddy_t *cb,uint32_t order){
-    if(order < cb->min_order || order > cb->max_order){
+    if(order > cb->max_order){
         return 0;
     }
     uint32_t idx = cb->max_order  - order;
@@ -1205,7 +1205,7 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
  */
 static void __buddy_free(buddy_t *cb,void *block,uint32_t order ){
     
-    if(order < cb->min_order || order > cb->max_order){
+    if(order > cb->max_order){
         return;
     }
 
@@ -1705,7 +1705,7 @@ ALWAYS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t **q ,bad_tcb_t *tcb,uin
 ALWAYS_STATIC void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
     bad_tcb_t *traverse_main = *mainq;
     bad_tcb_t *traverse_temp = tempq;
-    bad_tcb_t *main_prev;
+    bad_tcb_t *prev_main;
     bad_tcb_t *insert;
     
     if(!traverse_main){
@@ -1717,7 +1717,7 @@ ALWAYS_STATIC void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
     
     if(traverse_temp->raised_priority < traverse_main->raised_priority ){
         insert = traverse_temp;
-        main_prev = insert;
+        prev_main = insert;
         traverse_temp = traverse_temp->next;
         __enqueue_head(mainq, insert, traverse_main->misc);
     }
@@ -1726,19 +1726,23 @@ ALWAYS_STATIC void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
 
         if(traverse_temp->raised_priority < traverse_main->raised_priority){
             insert = traverse_temp;
-            traverse_temp = traverse_temp->next;
-            insert->next = traverse_main;
+            bad_tcb_t *prev_temp = traverse_temp;
+            while(traverse_temp && traverse_temp->raised_priority < traverse_main->raised_priority){
+                prev_temp = traverse_temp;
+                traverse_temp = traverse_temp->next;
+            }
+            prev_temp->next = traverse_main;
             insert->prev = traverse_main->prev;
             traverse_main->prev->next = insert;
-            traverse_main->prev = insert;
+            traverse_main->prev = prev_temp;
         }
-        main_prev = traverse_main;
+        prev_main = traverse_main;
         traverse_main = traverse_main->next;
     }
 
     if(traverse_temp){
-        main_prev->next = traverse_temp;
-        traverse_temp->prev = main_prev;
+        prev_main->next = traverse_temp;
+        traverse_temp->prev = prev_main;
     }
 }
 
@@ -2651,7 +2655,7 @@ static inline __attribute__((always_inline)) void __task_mpu_apply_perms(bad_tcb
         : "+r" (rbar_ptr)                 // %0
         : "r" (tcb),                      // %1
           "r" (STACK_RASR)               // %2
-        : "r0", "r2", "r3", "cc", "memory" 
+        : "r0", "r2", "r3", "memory" 
     );
 }
 #endif

@@ -1,5 +1,5 @@
 CC = arm-none-eabi-gcc
-CFLAGS = -O2 -ggdb -Wall -Wextra  -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
+CFLAGS = -ggdb -Wall -Wextra  -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
 LDFLAGS = -Tstm32f411ceu6.ld -nolibc --specs=nosys.specs -nostartfiles  
 INCLUDES = -Iinc/ 
 

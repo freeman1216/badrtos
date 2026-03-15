@@ -1,3 +1,12 @@
+#define BAD_PLLM (25)
+#define BAD_PLLN (400)
+#define BAD_PLLQ (10)
+#define BAD_PLLP (PLLP4)
+
+#define BAD_AHB_PRE     (HPRE_DIV_1)
+#define BAD_APB1_PRE    (PPRE_DIV_2)
+#define BAD_APB2_PRE    (PPRE_DIV_1)
+
 #define BAD_USART_IMPLEMENTATION
 #define BAD_FLASH_IMPLEMENTATION
 #define BAD_RCC_IMPLEMENTATION
@@ -51,7 +60,7 @@ static inline void __periph_setup(){
 
 
 START_TASK_MPU_REGIONS_DEFINITIONS(task1)
-    DEFINE_PERIPH_ACCESS_REGION(USART1_BASE, sizeof(USART_typedef_t))
+    DEFINE_PERIPH_ACCESS_REGION(task1,USART1_BASE, sizeof(USART_typedef_t))
 END_TASK_MPU_REGIONS(task1)
 
 bad_tcb_t* task1tcb;
@@ -59,28 +68,50 @@ bad_tcb_t* task2tcb;
 bad_sem_t sem;
 bad_nbsem_t nbsem;
 
-void cb(bad_tcb_t* tcb, void* par){
-    (void)tcb;
-    (void) par;
-    while(1);
-}
+
 void task1(){
     while (1) {
-
+        task_delay(100, 0, 0);
     }
 }
 
 void task2(){
     while (1) {
-
+        task_delay(100, 0, 0);
     }
 }
-
+void task3(){
+    while (1) {
+        task_delay(100, 0, 0);
+    }
+}
+void task4(){
+    uint32_t i1 = 0;
+    while (1) {
+        i1++;
+    }
+}
+void task5(){
+    uint32_t i2 = 0;
+    while (1) {
+        i2++;
+    }
+}
+void task6(){
+    uint32_t i3 = 0;
+    while (1) {
+        i3++;
+    }
+}
 #define TASK1_PRIORITY 0 
 #define TASK2_PRIORITY 0
 #define TASK2_STACK_SIZE 1024
 #define TASK1_STACK_SIZE 1024
 TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
+TASK_STATIC_STACK(task3, TASK2_STACK_SIZE);
+TASK_STATIC_STACK(task4, TASK2_STACK_SIZE);
+TASK_STATIC_STACK(task5, TASK2_STACK_SIZE);
+TASK_STATIC_STACK(task6, TASK2_STACK_SIZE);
 void bad_user_setup(){
     bad_task_descr_t task1_descr = {
         .stack = 0,
@@ -88,7 +119,6 @@ void bad_user_setup(){
         .dyn_stack = 1,
         .entry = task1,
         .regions = task1_regions,
-        .region_count = MPU_REGIONS_SIZE(task1),
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY
     };
@@ -101,6 +131,38 @@ void bad_user_setup(){
         .base_priority = TASK2_PRIORITY
     };
     task2tcb = task_make(&task2_descr);
+    bad_task_descr_t task3_descr = {
+        .stack = task3_stack,
+        .stack_size = TASK2_STACK_SIZE,
+        .entry = task3,
+        .ticks_to_change = 500,
+        .base_priority = TASK2_PRIORITY
+    };
+    task_make(&task3_descr);
+    bad_task_descr_t task4_descr = {
+        .stack = task4_stack,
+        .stack_size = TASK2_STACK_SIZE,
+        .entry = task4,
+        .ticks_to_change = 500,
+        .base_priority = TASK2_PRIORITY+1
+    };
+    task_make(&task4_descr);    
+    bad_task_descr_t task5_descr = {
+        .stack = task5_stack,
+        .stack_size = TASK2_STACK_SIZE,
+        .entry = task5,
+        .ticks_to_change = 500,
+        .base_priority = TASK2_PRIORITY+2
+    };
+    task_make(&task5_descr);
+    bad_task_descr_t task6_descr = {
+        .stack = task6_stack,
+        .stack_size = TASK2_STACK_SIZE,
+        .entry = task6,
+        .ticks_to_change = 500,
+        .base_priority = TASK2_PRIORITY+3
+    };
+    task_make(&task6_descr);
 }
 
 

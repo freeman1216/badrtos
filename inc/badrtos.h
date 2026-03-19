@@ -19,9 +19,9 @@
  *  - !! If the task uses FPU make sure the stack size can accomodate additional 33 registers 
  */
 #pragma once
+#include <stdint.h>
 #ifndef BAD_RTOS_CORE
 #define BAD_RTOS_CORE
-
 
 
 //CONFIG
@@ -73,6 +73,7 @@ typedef enum {
     BAD_RTOS_STATUS_BAD_PARAMETERS,
     BAD_RTOS_STATUS_NOT_BLOCKED,
     BAD_RTOS_STATUS_NOT_DELAYED,
+    BAD_RTOS_STATUS_INVALID_HANDLE,
     BAD_RTOS_STATUS_WOULD_BLOCK,
     BAD_RTOS_STATUS_CANT_YEILD,
     BAD_RTOS_STATUS_CANT_FINISH,
@@ -117,6 +118,8 @@ typedef struct {
 #endif
 
 typedef void (*taskptr)(void * par) ;
+typedef uint32_t bad_task_handle_t;
+typedef void (*cbptr)(bad_task_handle_t handle,void * par); 
 // main fat struct of the program
 typedef struct bad_tcb{
     // stack pointer, doesnt really reflect the actual one when running, actual one is + 32
@@ -127,7 +130,7 @@ typedef struct bad_tcb{
     uint32_t stack_size;
     taskptr entry;
     //callback for delays
-    void (*cbptr)(struct bad_tcb* tcb,void * par);
+    cbptr cbptr;
     //args for the callback
     void* args;
     struct bad_tcb* prev;
@@ -141,6 +144,7 @@ typedef struct bad_tcb{
 #endif
     bad_rtos_misc_t misc;
     bad_rtos_delayq_misc_t delayq_misc;
+    uint16_t generation; //for handles
 #if defined (BAD_RTOS_USE_KHEAP)
     //a flag for dynamic stack
     uint8_t dyn_stack ;
@@ -153,7 +157,6 @@ typedef struct bad_tcb{
 #endif
 }bad_tcb_t;
 
-typedef void (*cbptr)(struct bad_tcb* tcb,void * par); 
 //task decription for task creation
 typedef struct{
     uint32_t stack_size;
@@ -287,7 +290,7 @@ static uint32_t task_name##_stack[size/sizeof(uint32_t)] __attribute__((section(
  * @retval  bad_tcb_t* Pointer to a created task
  * @retval  NULL pointer (BAD_RTOS_ALLOC_FAIL) if tcb or stack allocation failed
  */
-extern bad_tcb_t* task_make(bad_task_descr_t *descr);
+extern bad_task_handle_t task_make(bad_task_descr_t *descr);
 
 /**
  * \b task_delay
@@ -354,7 +357,7 @@ extern bad_rtos_status_t task_block();
  * @retval  BAD_RTOS_STATUS_OK task is successfully unblocked
  * @retval  BAD_RTOS_STATUS_NOT_BLOCKED the task is not blocked
  */
-extern bad_rtos_status_t task_unblock(bad_tcb_t *task);
+extern bad_rtos_status_t task_unblock(bad_task_handle_t task);
 /**
  * \b task_yield
  *
@@ -405,7 +408,7 @@ extern bad_rtos_status_t task_finish();
  * @retval  BAD_RTOS_STATUS_OK tasks delay successfully canceled
  * @retval  BAD_RTOS_STATUS_NOT_DELAYED task is not delayed 
  */
-extern bad_rtos_status_t task_delay_cancel(bad_tcb_t *task);
+extern bad_rtos_status_t task_delay_cancel(bad_task_handle_t *task);
 
 #ifdef BAD_RTOS_USE_MUTEX
 // Priority inheriting mutex api
@@ -931,6 +934,11 @@ START_TASK_MPU_REGIONS_DEFINITIONS(zeroed) //Fallback zeroed regions array
 END_TASK_MPU_REGIONS(zeroed)
 
 #define STACK_RASR MPU_RASR_ENABLE|(0x4)<<1|MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB_SHAREABLE|MPU_AP_PRIV_RW_UNPRIV_FAULT
+
+#define BAD_RTOS_HANDLE_GEN(gen) (gen << 16)
+#define BAD_RTOS_HANDLE_GET_IDX(handle) (handle & 0xFFFF)
+#define BAD_RTOS_HANDLE_GET_GEN(handle) (handle >> 16)
+#define BAD_RTOS_HANDLE_INVALID_HANDLE (-1)
 /**
  * \b __task_mpu_apply_perms
  *
@@ -1348,34 +1356,62 @@ ALWAYS_STATIC void __tcb_queue_slab_init(){
     tcbslab.free_bitmask = (1UL<<(BAD_RTOS_MAX_TASKS))-1;
 }
 /**
- * \b __tcb_node_alloc
+ * \b __tcb_slab_alloc
  *
  * Internal function that allocates a node from global tcb bitmask slab
  *
  * This function should not be called by the application
  * @retval bad_tcb_t * ptr to allocated tcb node
  */
-ALWAYS_STATIC bad_tcb_t* __tcb_node_alloc(){
+ALWAYS_STATIC bad_tcb_t *__tcb_slab_alloc(){
     if(tcbslab.free_bitmask == 0){
         return (bad_tcb_t*)BAD_RTOS_STATUS_ALLOC_FAIL;
     }
     uint8_t block_idx = __builtin_ctz(tcbslab.free_bitmask);
     tcbslab.free_bitmask &= ~(1UL<<block_idx);
-    return tcbslab.node_arr+block_idx;
+    return tcbslab.node_arr + block_idx;
 }
 /**
- * \b __tcb_node_free
+ * \b  __tcb_slab_get_idx_from_ptr
+ *
+ * Internal function that translates a tcb ptr into its index in tcb slab array 
+ *
+ * This function should not be called by the application
+ * @retval uint8_t index into tcb array if invalid returns 0xFF
+ */
+ALWAYS_STATIC uint8_t __tcb_slab_get_idx_from_ptr(bad_tcb_t *block){
+    if(tcbslab.node_arr > block || tcbslab.node_arr + BAD_RTOS_MAX_TASKS < block){
+        return 0xFF;
+    }
+    return block - tcbslab.node_arr;
+}
+/**
+ * \b  __tcb_slab_get_idx_from_ptr
+ *
+ * Internal function that translates tcb index into a ptr  
+ *
+ * This function should not be called by the application
+ * @retval bad_tcb_t * ptr to tcb if invalid returns 0
+ */
+ALWAYS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(uint8_t idx){
+    if(idx > BAD_RTOS_MAX_TASKS){
+        return 0;
+    }
+    return tcbslab.node_arr+idx;
+}
+
+/**
+ * \b __tcb_slab_free
  *
  * Internal function that frees a node from global tcb bitmask slab
  *
  * This function should not be called by the application
  */
-ALWAYS_STATIC void __tcb_node_free(bad_tcb_t *block){
-
-    if(block < tcbslab.node_arr || block >= tcbslab.node_arr+BAD_RTOS_MAX_TASKS){
+ALWAYS_STATIC void __tcb_slab_free(bad_tcb_t *tcb){
+    uint8_t block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
+    if(block_idx > BAD_RTOS_MAX_TASKS){
         return;
     }
-    uint8_t block_idx = block - tcbslab.node_arr;
     tcbslab.free_bitmask |= (1ULL<<block_idx); 
 }
 
@@ -1505,10 +1541,7 @@ ALWAYS_STATIC void __delayq_enqueue( bad_tcb_t *tcb,uint32_t absolute){
  *
  */
 ALWAYS_STATIC bad_rtos_status_t __dequeue_delayq(bad_tcb_t *tcb){
-    if(!kernel_cb.delayq){
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
-    }
-    
+   
     if(tcb->delayq_misc == BAD_RTOS_MISC_NOT_DELAYED){
         return BAD_RTOS_STATUS_WRONG_Q;
     }
@@ -1690,6 +1723,7 @@ ALWAYS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t **q ,bad_tcb_t *tcb,uin
     }
     return BAD_RTOS_STATUS_OK;
 }
+
 /**
  * \b __merge_queues
  *  Internal function that merges two priority based queues (a temporary one and a main one(that is the target)). 
@@ -1702,26 +1736,27 @@ ALWAYS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t **q ,bad_tcb_t *tcb,uin
  * @param[in] bad_tcb_t ** queue to merge into
  * @param[in] bad_tcb_t * queue to merge
  */
+
 ALWAYS_STATIC void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
     bad_tcb_t *traverse_main = *mainq;
     bad_tcb_t *traverse_temp = tempq;
     bad_tcb_t *prev_main;
     bad_tcb_t *insert;
-    
+
     if(!traverse_main){
         *mainq = tempq;
         return;
     }
 
     ++traverse_temp->misc;
-    
+
     if(traverse_temp->raised_priority < traverse_main->raised_priority ){
         insert = traverse_temp;
         prev_main = insert;
         traverse_temp = traverse_temp->next;
         __enqueue_head(mainq, insert, traverse_main->misc);
     }
-    
+
     while(traverse_main && traverse_temp){
 
         if(traverse_temp->raised_priority < traverse_main->raised_priority){
@@ -1848,7 +1883,9 @@ ALWAYS_STATIC void __handle_systick_event(bad_systick_status_t status){
                 bad_tcb_t *wake = __dequeue_delayq_head();
              
                 if(wake->cbptr){
-                    wake->cbptr(wake,wake->args);
+                    bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
+                                                        BAD_RTOS_HANDLE_GEN(wake->generation);
+                    wake->cbptr(wake_handle,wake->args);
                     wake->cbptr = 0;
                     wake->args = 0;
                 }
@@ -1866,7 +1903,9 @@ ALWAYS_STATIC void __handle_systick_event(bad_systick_status_t status){
                 bad_tcb_t *wake = __dequeue_delayq_head();
 
                 if(wake->cbptr){
-                    wake->cbptr(wake,wake->args);
+                    bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
+                                                        BAD_RTOS_HANDLE_GEN(wake->generation);
+                    wake->cbptr(wake_handle,wake->args);
                     wake->cbptr = 0;
                     wake->args = 0;
                 }
@@ -1907,7 +1946,7 @@ ALWAYS_STATIC void __handle_systick_event(bad_systick_status_t status){
 ALWAYS_STATIC uint32_t * __init_stack(void (*task)(), uint32_t *stacktop,void *args){
     *--stacktop = 0x01000000UL;     // xPSR (Thumb bit set)
     *--stacktop = (uint32_t)task|0x1;   // PC
-    *--stacktop = 0xFFFFFFFDUL;     // LR = EXC_RETURN (thread mode + PSP)
+    *--stacktop = 0x0;     
     *--stacktop = 0x12121212UL;     // R12
     *--stacktop = 0x03030303UL;     // R3
     *--stacktop = 0x02020202UL;     // R2
@@ -1921,10 +1960,11 @@ ALWAYS_STATIC uint32_t * __init_stack(void (*task)(), uint32_t *stacktop,void *a
 }
 
 
-ALWAYS_STATIC bad_tcb_t* __task_make(bad_task_descr_t *args){
-    bad_tcb_t* new_task = __tcb_node_alloc();
+ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
+    bad_tcb_t *new_task = __tcb_slab_alloc();
+    uint8_t new_task_idx = __tcb_slab_get_idx_from_ptr(new_task);
     if(!new_task){
-        return (bad_tcb_t*)BAD_RTOS_STATUS_ALLOC_FAIL; //shut up warning, its zero
+        return BAD_RTOS_HANDLE_INVALID_HANDLE; //shut up warning, its zero
     }
     new_task->entry = args->entry;
     new_task->base_priority = args->base_priority;
@@ -1934,7 +1974,8 @@ ALWAYS_STATIC bad_tcb_t* __task_make(bad_task_descr_t *args){
     if(args->dyn_stack){
 #ifdef BAD_RTOS_USE_MPU
         if(args->stack_size < 128){
-             return (bad_tcb_t*)BAD_RTOS_STATUS_ALLOC_FAIL;
+            __tcb_slab_free(new_task);    
+            return BAD_RTOS_HANDLE_INVALID_HANDLE;
         }
 #endif
 
@@ -1962,12 +2003,17 @@ ALWAYS_STATIC bad_tcb_t* __task_make(bad_task_descr_t *args){
     }else{
         __enqueue_by_prio(&kernel_cb.readyq, new_task,BAD_RTOS_MISC_READYQ_HEAD);
     }
-    return new_task;
+    bad_task_handle_t handle = new_task_idx | (new_task->generation << 16);
+    return handle;
 }
 
 
-
-ALWAYS_STATIC bad_rtos_status_t __task_unblock(bad_tcb_t *tcb){
+ALWAYS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle){
+    
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
+    if(!tcb || tcb->generation != BAD_RTOS_HANDLE_GET_GEN(handle)){
+        return BAD_RTOS_STATUS_INVALID_HANDLE;
+    }
     if(__remove_entry(&kernel_cb.blockedq, tcb, BAD_RTOS_MISC_BLOCKEDQ_HEAD)!= BAD_RTOS_STATUS_OK){
         return BAD_RTOS_STATUS_NOT_BLOCKED;
     }
@@ -1975,7 +2021,12 @@ ALWAYS_STATIC bad_rtos_status_t __task_unblock(bad_tcb_t *tcb){
     return BAD_RTOS_STATUS_OK;
 }
 
-ALWAYS_STATIC bad_rtos_status_t __task_delay_cancel(bad_tcb_t *tcb){
+ALWAYS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle){
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
+    if(!tcb || tcb->generation != BAD_RTOS_HANDLE_GET_GEN(handle)){
+        return BAD_RTOS_STATUS_INVALID_HANDLE;
+    }
+
     if(__dequeue_delayq(tcb)!= BAD_RTOS_STATUS_OK){
         return BAD_RTOS_STATUS_NOT_DELAYED;
     }
@@ -2020,8 +2071,9 @@ bad_rtos_status_t mutex_init(bad_mutex_t *mut){
  * This function should not be called by the application
  *
  */
-ALWAYS_STATIC void __mutex_timeout_cb(bad_tcb_t *tcb ,void *mutex){
+ALWAYS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle ,void *mutex){
     bad_mutex_t * mut = (bad_mutex_t* ) mutex;
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
     __remove_entry(&mut->blockedq,tcb,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD);
     *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
 }
@@ -2108,7 +2160,6 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
     }
 
     mut->owner = __dequeue_head(&mut->blockedq ,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD);
-    mut->owner->mutex_count++;
     kernel_cb.curr->mutex_count--;
     if(!kernel_cb.curr->mutex_count){
         kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
@@ -2117,7 +2168,8 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
     if(!mut->owner){ 
         return BAD_RTOS_STATUS_OK; 
     }
-
+    mut->owner->mutex_count++;
+    
     if(mut->owner->cbptr == __mutex_timeout_cb){
         mut->owner->cbptr = 0;
         mut->owner->args = 0;
@@ -2157,8 +2209,9 @@ bad_rtos_status_t sem_init(bad_sem_t *sem,uint16_t reset_value){
  * This function should not be called by the application
  *
  */
-ALWAYS_STATIC void __sem_timeout_cb(bad_tcb_t *tcb ,void *semaphore){
+ALWAYS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore){
     bad_sem_t *sem = (bad_sem_t* ) semaphore;
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
     __remove_entry(&sem->blockedq,tcb,BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD);
     *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
 }
@@ -2353,7 +2406,8 @@ ALWAYS_STATIC void __task_finish(){
     }
     __sched_update(__dequeue_head(&kernel_cb.readyq,BAD_RTOS_MISC_READYQ_HEAD));
 skip_resched:
-    __tcb_node_free(kernel_cb.curr);//free the the tcb used by task
+    kernel_cb.curr->generation++;
+    __tcb_slab_free(kernel_cb.curr);//free the the tcb used by task
 }
 
 ALWAYS_STATIC void __task_delay(uint32_t delay,cbptr cb, void* args){
@@ -2746,12 +2800,12 @@ static void __attribute__((used)) svc_c(uint8_t svc, uint32_t* stack){
         }
         case 0x2:
         case 0x20:{
-           stack[0]=__task_unblock((bad_tcb_t*) stack[0]);
+           stack[0]=__task_unblock(stack[0]);
            break;
         }
         case 0x3:
         case 0x30:{
-            stack[0] =__task_delay_cancel((bad_tcb_t*)stack[0]);
+            stack[0] =__task_delay_cancel(stack[0]);
             break;
         }
         case 0x40:{

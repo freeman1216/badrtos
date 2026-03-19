@@ -48,12 +48,12 @@ START_TASK_MPU_REGIONS_DEFINITIONS(task1)
     DEFINE_PERIPH_ACCESS_REGION(task1,USART1_BASE, sizeof(USART_typedef_t))
 END_TASK_MPU_REGIONS(task1)
 
-bad_tcb_t *task1tcb;
-bad_tcb_t *task2tcb;
-bad_tcb_t *task3tcb;
+bad_task_handle_t task1h;
+bad_task_handle_t task2h;
+bad_task_handle_t task3h;
 uint32_t callback_hit;
 uint32_t unblocked;
-void cb(bad_tcb_t* unused0, void* unused1){
+void cb(bad_task_handle_t unused0, void* unused1){
     UNUSED(unused0);
     UNUSED(unused1);
     callback_hit++;
@@ -70,7 +70,7 @@ void task1(){
 void task2(){
     while (1) {
         bad_rtos_status_t status;
-        status = task_unblock(task1tcb);
+        status = task_unblock(task1h);
         if(status == BAD_RTOS_STATUS_OK){
             unblocked++;
             task_yield();
@@ -101,7 +101,7 @@ void bad_user_setup(){
         .ticks_to_change = 500,
         .base_priority = TASK1_PRIORITY
     };
-    task1tcb = task_make(&task1_descr);
+    task1h = task_make(&task1_descr);
     bad_task_descr_t task2_descr = {
         .stack = task2_stack,
         .stack_size = TASK2_STACK_SIZE,
@@ -109,7 +109,7 @@ void bad_user_setup(){
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY
     };
-    task2tcb = task_make(&task2_descr);
+    task2h = task_make(&task2_descr);
     bad_task_descr_t task3_descr = {
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
@@ -119,7 +119,7 @@ void bad_user_setup(){
         .ticks_to_change = 500,
         .base_priority = IDLE_TASK_PRIO - 1
     };
-    task3tcb = task_make(&task3_descr);
+    task3h = task_make(&task3_descr);
 }
 
 

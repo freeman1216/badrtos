@@ -46,8 +46,8 @@ START_TASK_MPU_REGIONS_DEFINITIONS(task1)
     DEFINE_PERIPH_ACCESS_REGION(task1,USART1_BASE, sizeof(USART_typedef_t))
 END_TASK_MPU_REGIONS(task1)
 
-bad_tcb_t* task1tcb;
-bad_tcb_t* task2tcb;
+bad_task_handle_t task1h;
+bad_task_handle_t task2h;
 bad_mutex_t mut;
 void task1(){
     while (1) {
@@ -84,7 +84,7 @@ void bad_user_setup(){
         .ticks_to_change = 500,
         .base_priority = TASK1_PRIORITY
     };
-    task1tcb = task_make(&task1_descr);
+    task1h = task_make(&task1_descr);
     bad_task_descr_t task2_descr = {
         .stack = task2_stack,
         .stack_size = TASK2_STACK_SIZE,
@@ -92,7 +92,7 @@ void bad_user_setup(){
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY
     };
-    task2tcb = task_make(&task2_descr);
+    task2h = task_make(&task2_descr);
 }
 
 

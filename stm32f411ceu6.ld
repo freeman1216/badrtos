@@ -17,7 +17,7 @@ SECTIONS
         __etext = .;
     } > ROM
 
-    .kernel_bss : ALIGN(4)
+    .kernel_bss (NOLOAD) : ALIGN(4)
     {
         __kernel_bss = .;
         *(.kernel_bss)

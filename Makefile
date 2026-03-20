@@ -13,8 +13,10 @@ MAIN_SRC = $(SOURCES) $(SRC_DIR)/main.c
 TIME_FRAME_SRC = $(SOURCES) tests/time_frame.c
 BLOCK_DELAY_SRC = $(SOURCES) tests/block_delay.c
 MUTEX_BLOCK_SRC = $(SOURCES) tests/mutex_block.c
+MUTEX_DELAY_SRC = $(SOURCES) tests/mutex_delay.c
 MUTEX_DELETE_SRC = $(SOURCES) tests/mutex_delete.c
 SEM_BLOCK_SRC = $(SOURCES) tests/sem_block.c
+SEM_DELAY_SRC = $(SOURCES) tests/sem_delay.c
 SEM_DELETE_SRC = $(SOURCES) tests/sem_delete.c
 MSGQ_SRC = $(SOURCES) tests/msgq.c
 NBSEM_DELETE_SRC = $(SOURCES) tests/nbsem_delete.c
@@ -25,8 +27,10 @@ MAIN_BIN = $(BUILD_DIR)/main.elf
 TIME_FRAME_BIN = $(BUILD_DIR)/time_frame.elf
 BLOCK_DELAY_BIN = $(BUILD_DIR)/block_delay.elf
 MUTEX_BLOCK_BIN = $(BUILD_DIR)/mutex_block.elf
+MUTEX_DELAY_BIN = $(BUILD_DIR)/mutex_delay.elf
 MUTEX_DELETE_BIN = $(BUILD_DIR)/mutex_delete.elf
 SEM_BLOCK_BIN = $(BUILD_DIR)/sem_block.elf
+SEM_DELAY_BIN = $(BUILD_DIR)/sem_delay.elf
 SEM_DELETE_BIN = $(BUILD_DIR)/sem_delete.elf
 MSGQ_BIN = $(BUILD_DIR)/msgq.elf
 NBSEM_DELETE_BIN = $(BUILD_DIR)/nbsem_delete.elf
@@ -65,8 +69,14 @@ $(MUTEX_BLOCK_BIN): $(BUILD_DIR)
 $(MUTEX_DELETE_BIN): $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(MUTEX_DELETE_SRC) -o $@
 
+$(MUTEX_DELAY_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(MUTEX_DELAY_SRC) -o $@
+
 $(SEM_BLOCK_BIN): $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(SEM_BLOCK_SRC) -o $@
+
+$(SEM_DELAY_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(SEM_DELAY_SRC) -o $@
 
 $(SEM_DELETE_BIN): $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(SEM_DELETE_SRC) -o $@
@@ -95,11 +105,17 @@ block_delay: clean $(BLOCK_DELAY_BIN)
 .PHONY: mutex_block
 mutex_block: clean $(MUTEX_BLOCK_BIN)
 
+.PHONY: mutex_delay
+mutex_delay: clean $(MUTEX_DELAY_BIN)
+
 .PHONY: mutex_delete
 mutex_delete: clean $(MUTEX_DELETE_BIN)
 
 .PHONY: sem_block
 sem_block: clean $(SEM_BLOCK_BIN)
+
+.PHONY: sem_delay
+sem_delay: clean $(SEM_DELAY_BIN)
 
 .PHONY: sem_delete
 sem_delete: clean $(SEM_DELETE_BIN)

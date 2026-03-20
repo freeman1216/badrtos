@@ -19,7 +19,6 @@
  *  - !! If the task uses FPU make sure the stack size can accomodate additional 33 registers 
  */
 #pragma once
-#include <stdint.h>
 #ifndef BAD_RTOS_CORE
 #define BAD_RTOS_CORE
 
@@ -73,7 +72,7 @@ typedef enum {
     BAD_RTOS_STATUS_BAD_PARAMETERS,
     BAD_RTOS_STATUS_NOT_BLOCKED,
     BAD_RTOS_STATUS_NOT_DELAYED,
-    BAD_RTOS_STATUS_INVALID_HANDLE,
+    BAD_RTOS_STATUS_HANDLE_INVALID,
     BAD_RTOS_STATUS_WOULD_BLOCK,
     BAD_RTOS_STATUS_CANT_YEILD,
     BAD_RTOS_STATUS_CANT_FINISH,
@@ -117,9 +116,12 @@ typedef struct {
 }mpu_region_t;
 #endif
 
-typedef void (*taskptr)(void * par) ;
 typedef uint32_t bad_task_handle_t;
-typedef void (*cbptr)(bad_task_handle_t handle,void * par); 
+#define BAD_TASK_HANDLE_INVALID_HANDLE (-1)
+
+typedef void (*taskptr)(void * par) ;
+typedef void (*cbptr)(bad_task_handle_t handle,void * par);
+
 // main fat struct of the program
 typedef struct bad_tcb{
     // stack pointer, doesnt really reflect the actual one when running, actual one is + 32
@@ -287,8 +289,8 @@ static uint32_t task_name##_stack[size/sizeof(uint32_t)] __attribute__((section(
  *
  * @param[in] bad_task_descr_t * Pointer to a descriptor object
  *
- * @retval  bad_tcb_t* Pointer to a created task
- * @retval  NULL pointer (BAD_RTOS_ALLOC_FAIL) if tcb or stack allocation failed
+ * @retval  bad_task_handle_t Task handle
+ * @retval  BAD_TASK_HANDLE_INVALID_HANDLE (-1) on allocation falure 
  */
 extern bad_task_handle_t task_make(bad_task_descr_t *descr);
 
@@ -352,10 +354,11 @@ extern bad_rtos_status_t task_block();
  * Tasks are unblocked using task_unblock() public function
  *
  * This function can be called from interrupt context.
- * @param[in] bad_tcb_t* Pointer to tcb of the task to unblock
+ * @param[in] bad_task_handle_t Task handle
  *
  * @retval  BAD_RTOS_STATUS_OK task is successfully unblocked
  * @retval  BAD_RTOS_STATUS_NOT_BLOCKED the task is not blocked
+ * @retval  BAD_RTOS_STATUS_HANDLE_INVALID handle is invalid
  */
 extern bad_rtos_status_t task_unblock(bad_task_handle_t task);
 /**
@@ -403,12 +406,13 @@ extern bad_rtos_status_t task_finish();
  * Tries to preempt the currently running task 
  *
  * This function can be called from interrupt context.
- * @param[in] bad_tcb_t* Ptr to task tcb to wake up from delay  
+ * @param[in] bad_task_handle_t Task handle
  *
- * @retval  BAD_RTOS_STATUS_OK tasks delay successfully canceled
- * @retval  BAD_RTOS_STATUS_NOT_DELAYED task is not delayed 
+ * @retval BAD_RTOS_STATUS_OK tasks delay successfully canceled
+ * @retval BAD_RTOS_STATUS_NOT_DELAYED task is not delayed 
+ * @retval BAD_RTOS_STATUS_HANDLE_INVALID handle invalid 
  */
-extern bad_rtos_status_t task_delay_cancel(bad_task_handle_t *task);
+extern bad_rtos_status_t task_delay_cancel(bad_task_handle_t task);
 
 #ifdef BAD_RTOS_USE_MUTEX
 // Priority inheriting mutex api
@@ -935,10 +939,9 @@ END_TASK_MPU_REGIONS(zeroed)
 
 #define STACK_RASR MPU_RASR_ENABLE|(0x4)<<1|MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB_SHAREABLE|MPU_AP_PRIV_RW_UNPRIV_FAULT
 
-#define BAD_RTOS_HANDLE_GEN(gen) (gen << 16)
-#define BAD_RTOS_HANDLE_GET_IDX(handle) (handle & 0xFFFF)
-#define BAD_RTOS_HANDLE_GET_GEN(handle) (handle >> 16)
-#define BAD_RTOS_HANDLE_INVALID_HANDLE (-1)
+#define BAD_TASK_HANDLE_GEN(gen) (gen << 16)
+#define BAD_TASK_HANDLE_GET_IDX(handle) (handle & 0xFFFF)
+#define BAD_TASK_HANDLE_GET_GEN(handle) (handle >> 16)
 /**
  * \b __task_mpu_apply_perms
  *
@@ -1728,7 +1731,7 @@ ALWAYS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t **q ,bad_tcb_t *tcb,uin
  * \b __merge_queues
  *  Internal function that merges two priority based queues (a temporary one and a main one(that is the target)). 
  *  Temp queue ptr cannot be null, will derefence it if passed.
- *  Misc enum of temporary queue should be updated to the target queues enum beforehand.
+ *  Misc enum of temporary queue should be updated to the target queues member enum beforehand.
  *  
  * This function should not be called by the application
  * This function should not be called on kernel_cb.delayq delta list
@@ -1744,11 +1747,10 @@ ALWAYS_STATIC void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
     bad_tcb_t *insert;
 
     if(!traverse_main){
-        *mainq = tempq;
+        --traverse_temp->misc;
+        *mainq = traverse_temp;
         return;
     }
-
-    ++traverse_temp->misc;
 
     if(traverse_temp->raised_priority < traverse_main->raised_priority ){
         insert = traverse_temp;
@@ -1884,7 +1886,7 @@ ALWAYS_STATIC void __handle_systick_event(bad_systick_status_t status){
              
                 if(wake->cbptr){
                     bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
-                                                        BAD_RTOS_HANDLE_GEN(wake->generation);
+                                                        BAD_TASK_HANDLE_GEN(wake->generation);
                     wake->cbptr(wake_handle,wake->args);
                     wake->cbptr = 0;
                     wake->args = 0;
@@ -1904,7 +1906,7 @@ ALWAYS_STATIC void __handle_systick_event(bad_systick_status_t status){
 
                 if(wake->cbptr){
                     bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
-                                                        BAD_RTOS_HANDLE_GEN(wake->generation);
+                                                        BAD_TASK_HANDLE_GEN(wake->generation);
                     wake->cbptr(wake_handle,wake->args);
                     wake->cbptr = 0;
                     wake->args = 0;
@@ -1964,7 +1966,7 @@ ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
     bad_tcb_t *new_task = __tcb_slab_alloc();
     uint8_t new_task_idx = __tcb_slab_get_idx_from_ptr(new_task);
     if(!new_task){
-        return BAD_RTOS_HANDLE_INVALID_HANDLE; //shut up warning, its zero
+        return BAD_TASK_HANDLE_INVALID_HANDLE; //shut up warning, its zero
     }
     new_task->entry = args->entry;
     new_task->base_priority = args->base_priority;
@@ -1975,7 +1977,7 @@ ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
 #ifdef BAD_RTOS_USE_MPU
         if(args->stack_size < 128){
             __tcb_slab_free(new_task);    
-            return BAD_RTOS_HANDLE_INVALID_HANDLE;
+            return BAD_TASK_HANDLE_INVALID_HANDLE;
         }
 #endif
 
@@ -2010,9 +2012,9 @@ ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
 
 ALWAYS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle){
     
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
-    if(!tcb || tcb->generation != BAD_RTOS_HANDLE_GET_GEN(handle)){
-        return BAD_RTOS_STATUS_INVALID_HANDLE;
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
+    if(!tcb || tcb->generation != BAD_TASK_HANDLE_GET_GEN(handle)){
+        return BAD_RTOS_STATUS_HANDLE_INVALID;
     }
     if(__remove_entry(&kernel_cb.blockedq, tcb, BAD_RTOS_MISC_BLOCKEDQ_HEAD)!= BAD_RTOS_STATUS_OK){
         return BAD_RTOS_STATUS_NOT_BLOCKED;
@@ -2022,9 +2024,9 @@ ALWAYS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle){
 }
 
 ALWAYS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle){
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
-    if(!tcb || tcb->generation != BAD_RTOS_HANDLE_GET_GEN(handle)){
-        return BAD_RTOS_STATUS_INVALID_HANDLE;
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
+    if(!tcb || tcb->generation != BAD_TASK_HANDLE_GET_GEN(handle)){
+        return BAD_RTOS_STATUS_HANDLE_INVALID;
     }
 
     if(__dequeue_delayq(tcb)!= BAD_RTOS_STATUS_OK){
@@ -2033,7 +2035,7 @@ ALWAYS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle){
 
     tcb->cbptr = 0;
     tcb->args = 0;
-    *(tcb->sp+8) = BAD_RTOS_STATUS_WOKEN;
+    *(tcb->sp+9) = BAD_RTOS_STATUS_WOKEN;
     __sched_try_preempt(tcb);
     return BAD_RTOS_STATUS_OK;
 }
@@ -2073,9 +2075,9 @@ bad_rtos_status_t mutex_init(bad_mutex_t *mut){
  */
 ALWAYS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle ,void *mutex){
     bad_mutex_t * mut = (bad_mutex_t* ) mutex;
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
     __remove_entry(&mut->blockedq,tcb,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD);
-    *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
+    *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
 ALWAYS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
@@ -2098,8 +2100,8 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
     
     bad_tcb_t *traverse = mut->blockedq;
     while(traverse){
-        *(traverse->sp+8) = BAD_RTOS_STATUS_DELETED;
-        traverse->misc -= BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD - 1; 
+        *(traverse->sp+9) = BAD_RTOS_STATUS_DELETED;
+        traverse->misc = BAD_RTOS_MISC_READYQ_MEMBER; 
         if(traverse->cbptr == __mutex_timeout_cb){
             traverse->cbptr = 0;
             traverse->args = 0;
@@ -2176,7 +2178,7 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
         __dequeue_delayq(mut->owner);
     }
          
-    *(mut->owner->sp+8) = BAD_RTOS_STATUS_OK;
+    *(mut->owner->sp+9) = BAD_RTOS_STATUS_OK;
     
     __sched_try_preempt(mut->owner);
 
@@ -2211,9 +2213,9 @@ bad_rtos_status_t sem_init(bad_sem_t *sem,uint16_t reset_value){
  */
 ALWAYS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore){
     bad_sem_t *sem = (bad_sem_t* ) semaphore;
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_RTOS_HANDLE_GET_IDX(handle));
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
     __remove_entry(&sem->blockedq,tcb,BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD);
-    *(tcb->sp+8)=BAD_RTOS_STATUS_TIMEOUT;
+    *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
 ALWAYS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem){
@@ -2234,8 +2236,8 @@ ALWAYS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem){
     
     bad_tcb_t *traverse = sem->blockedq;
     while(traverse){
-        *(traverse->sp+8) = BAD_RTOS_STATUS_DELETED;
-        traverse->misc -= BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD - 1; 
+        *(traverse->sp+9) = BAD_RTOS_STATUS_DELETED;
+        traverse->misc = BAD_RTOS_MISC_READYQ_MEMBER; 
         if(traverse->cbptr == __sem_timeout_cb){
             traverse->cbptr = 0;
             traverse->args = 0;
@@ -2297,7 +2299,7 @@ ALWAYS_STATIC bad_rtos_status_t __sem_put(bad_sem_t *sem){
             tcb->cbptr = 0;
             tcb->args = 0;
         }
-        *(tcb->sp+8) = BAD_RTOS_STATUS_OK;
+        *(tcb->sp+9) = BAD_RTOS_STATUS_OK;
         __sched_try_preempt(tcb);
         return BAD_RTOS_STATUS_OK;
     }
@@ -2754,6 +2756,7 @@ static inline __attribute__((always_inline)) void __restore_basepri(uint32_t new
         : "memory"
     );
 }
+
 static inline __attribute__((always_inline)) void __set_control(uint32_t new_control){
     __asm__ volatile(
         "msr control, %0    \n"
@@ -2762,6 +2765,7 @@ static inline __attribute__((always_inline)) void __set_control(uint32_t new_con
         : "memory"
     ); 
 }
+
 static inline __attribute__((always_inline)) uint32_t __get_control(){
     uint32_t res;
     __asm__ volatile("mrs %0, control":"=r"(res));

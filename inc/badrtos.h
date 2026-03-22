@@ -857,9 +857,9 @@ typedef struct free_block {
 
 typedef struct {
     uint8_t* heap;
+    uint32_t heads_bmask;
     uint32_t max_order;
     uint32_t min_order;
-    uint32_t freelist_size;
     free_block_t* free_list;
     uint32_t* bmask;
 }buddy_t;
@@ -915,7 +915,7 @@ static uint32_t __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_S
 #define UFREE_LIST_SIZE (UMAX_ORDER-UMIN_ORDER+1)
 static uint8_t __attribute__((section(".uheap"))) uheap[UHEAP_SIZE];
 static buddy_t user_buddy;
-static free_block_t ufreelist[KFREE_LIST_SIZE];
+static free_block_t ufreelist[UFREE_LIST_SIZE];
 static uint32_t ubitmask[BUDDY_BITMASK_SIZE(UMAX_ORDER, UMIN_ORDER)];
 #endif
 
@@ -1136,6 +1136,7 @@ void  __buddy_init(buddy_t *cb,
         cb->free_list[i].next = &cb->free_list[i];
         cb->free_list[i].prev = &cb->free_list[i];
     }
+    cb->heads_bmask = 1;
 }
 /**
  * \b __buddy_alloc
@@ -1150,27 +1151,22 @@ void  __buddy_init(buddy_t *cb,
  * @retval void* allocated block
  */
 static void* __buddy_alloc(buddy_t *cb,uint32_t order){
-    if(order > cb->max_order){
+    if(order > cb->max_order ){
         return 0;
     }
     uint32_t idx = cb->max_order  - order;
-    uint32_t picked_idx = idx;
-    
-    for( ; picked_idx != UINT32_MAX; picked_idx--){
-        if(cb->free_list[picked_idx].next != &cb->free_list[picked_idx]){
-            break;
-        }
-    }
-    
-    if(picked_idx==UINT32_MAX){
-        return (void* )BAD_RTOS_STATUS_ALLOC_FAIL;
-    }
-    
+    uint32_t order_mask = (1 << (idx + 1)) - 1;
 
+    uint32_t picked_idx = 31 - __builtin_clz(cb->heads_bmask & order_mask);
+    if(picked_idx == UINT32_MAX){
+        return 0;
+    }
+    
     uint32_t splits = idx - picked_idx;
     uint8_t *block_for_split = (uint8_t*)cb->free_list[picked_idx].next;
     cb->free_list[picked_idx].next = cb->free_list[picked_idx].next->next;
     cb->free_list[picked_idx].next->prev = &cb->free_list[picked_idx];
+    cb->heads_bmask ^= (uint32_t)(&cb->free_list[idx] == cb->free_list[idx].next) << picked_idx;
     uint32_t splited_block_size = 1 << (cb->max_order - picked_idx-1);
     free_block_t *unused_block;
     uint32_t bmaskidx, bmask_word, bmask_bit,offset_from_base;
@@ -1184,7 +1180,7 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
     }
  
     
-    for(uint32_t i =0; i < splits;i++){
+    for(uint32_t i = 0; i < splits;i++){
         unused_block = (free_block_t *)(block_for_split+splited_block_size);
         unused_block->next = cb->free_list[picked_idx+1].next;
         cb->free_list[picked_idx+1].next = unused_block;
@@ -1195,8 +1191,9 @@ static void* __buddy_alloc(buddy_t *cb,uint32_t order){
         bmaskidx = ((1<<(picked_idx))-1) + ((offset_from_base) >> ( cb->max_order - picked_idx));
         bmask_word = bmaskidx >> 5;
         bmask_bit = bmaskidx & 31;
-        cb->bmask[bmask_word] ^= 1 << bmask_bit;
+        cb->bmask[bmask_word] ^= 1 << bmask_bit;        
         picked_idx++;
+        cb->heads_bmask |= (1 << picked_idx);
         splited_block_size>>=1;
     }
 
@@ -1251,6 +1248,7 @@ static void __buddy_free(buddy_t *cb,void *block,uint32_t order ){
         buddy->next->prev = buddy->prev;
         buddy->prev = 0;
         buddy->next = 0;
+        cb->heads_bmask ^= (uint32_t)(&cb->free_list[idx] == cb->free_list[idx].next) << idx;
         curr_order++;
         curr_block = parent_addr;
     }
@@ -1260,6 +1258,7 @@ static void __buddy_free(buddy_t *cb,void *block,uint32_t order ){
     final_block->next->prev = final_block;
     cb->free_list[idx].next = final_block;
     final_block->prev = &cb->free_list[idx];
+    cb->heads_bmask |= 1 << idx;
 }
 
 #endif
@@ -1397,7 +1396,7 @@ ALWAYS_STATIC uint8_t __tcb_slab_get_idx_from_ptr(bad_tcb_t *block){
  * @retval bad_tcb_t * ptr to tcb if invalid returns 0
  */
 ALWAYS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(uint8_t idx){
-    if(idx > BAD_RTOS_MAX_TASKS){
+    if(idx >= BAD_RTOS_MAX_TASKS){
         return 0;
     }
     return tcbslab.node_arr+idx;
@@ -1412,7 +1411,7 @@ ALWAYS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(uint8_t idx){
  */
 ALWAYS_STATIC void __tcb_slab_free(bad_tcb_t *tcb){
     uint8_t block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
-    if(block_idx > BAD_RTOS_MAX_TASKS){
+    if(block_idx >= BAD_RTOS_MAX_TASKS){
         return;
     }
     tcbslab.free_bitmask |= (1ULL<<block_idx); 
@@ -1966,7 +1965,7 @@ ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
     bad_tcb_t *new_task = __tcb_slab_alloc();
     uint8_t new_task_idx = __tcb_slab_get_idx_from_ptr(new_task);
     if(!new_task){
-        return BAD_TASK_HANDLE_INVALID_HANDLE; //shut up warning, its zero
+        return BAD_TASK_HANDLE_INVALID_HANDLE; 
     }
     new_task->entry = args->entry;
     new_task->base_priority = args->base_priority;
@@ -2615,6 +2614,7 @@ void __attribute__((naked)) pendsv_isr(){
         "msr psp,r0             \n"
         "msr basepri,r3         \n"
         "isb                    \n"
+        "dmb                    \n"
         "bx lr                  \n"
         ".ltorg                 \n"
         :
@@ -2726,7 +2726,7 @@ static inline __attribute__((always_inline)) uint32_t __ldrex(volatile uint32_t*
 
 static inline __attribute__((always_inline)) uint32_t __strex(uint32_t val,volatile uint32_t * addr){
     uint32_t res;
-    __asm__ volatile ("strex %0, %2, %1" : "=&r" (res), "=Q" (*addr) : "r" (val));    
+    __asm__ volatile ("strex %0, %2, %1" : "=&r" (res), "=Q" (*addr) : "r" (val));
     return res;
 }
 

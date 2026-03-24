@@ -933,26 +933,15 @@ static inline void __attribute__((always_inline)) __set_control(uint32_t control
 static inline uint32_t __attribute__((always_inline)) __get_control();
 extern void __init_second_stage();
 
+#define BAD_TASK_HANDLE_GEN(gen) ((gen) << 16)
+#define BAD_TASK_HANDLE_GET_IDX(handle) ((handle) & 0xFFFF)
+#define BAD_TASK_HANDLE_GET_GEN(handle) ((handle) >> 16)
+
 #ifdef BAD_RTOS_USE_MPU
 START_TASK_MPU_REGIONS_DEFINITIONS(zeroed) //Fallback zeroed regions array
 END_TASK_MPU_REGIONS(zeroed)
 
 #define STACK_RASR MPU_RASR_ENABLE|(0x4)<<1|MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB_SHAREABLE|MPU_AP_PRIV_RW_UNPRIV_FAULT
-
-#define BAD_TASK_HANDLE_GEN(gen) (gen << 16)
-#define BAD_TASK_HANDLE_GET_IDX(handle) (handle & 0xFFFF)
-#define BAD_TASK_HANDLE_GET_GEN(handle) (handle >> 16)
-/**
- * \b __task_mpu_apply_perms
- *
- * Internal function that applies task specific mpu rules
- * 
- *
- * This function should not be called by the application
- * @param[in] tcb ptr to a task 
- */
-//the implementation is in the asm block of this file grep for "Asm stuff" or for the declaration
- ALWAYS_STATIC void __attribute__((always_inline)) __task_mpu_apply_perms(bad_tcb_t *tcb);
 
 //Linker script symbols
 extern uint8_t __kernel_bss;
@@ -1069,6 +1058,7 @@ bad_queue_status_t msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args){
     CONTEX_SWITCH_BARIER;
     
     if(!q){
+        CONTEX_SWITCH_BARIER_RELEASE;
         return BAD_QUEUE_BAD_PARAMETERS;
     }
 
@@ -1091,8 +1081,6 @@ bad_queue_status_t msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args){
     
     block->signal = signal;
     block->args = args;
-    
-    DMB;
     
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_QUEUE_OK;
@@ -1798,12 +1786,6 @@ ALWAYS_STATIC void __merge_queues(bad_tcb_t **mainq, bad_tcb_t *tempq){
 ALWAYS_STATIC void __sched_update(bad_tcb_t *tcb){
     kernel_cb.next = tcb;
     tcb->misc = BAD_RTOS_MISC_RUNNING;
-#ifdef BAD_RTOS_USE_MPU
-    __task_mpu_apply_perms(tcb);
-#endif
-    if(!tcb->counter){
-        tcb->counter = tcb->ticks_to_change;
-    }
     SCB->ICSR = SCB_ICSR_PENDSVSET;
 }
 
@@ -1833,7 +1815,8 @@ ALWAYS_STATIC void __sched_try_update(){
 /**
  * \b __sched_try_preempt
  *
- * Internal function that check if a specified task that should preempt the current one or an already scheduled one
+ * Internal function that check if a specified task should preempt the current one or an already scheduled one
+ * Enqueues the task to readyq otherwise
  * 
  * Will derefence a null ptr if passed
  *
@@ -1874,66 +1857,44 @@ ALWAYS_STATIC void  __task_block(){
  * This function should not be called by the application
  *
  */
+
 ALWAYS_STATIC void __handle_systick_event(bad_systick_status_t status){
+    if(status > 1){
+        bad_tcb_t *wake_list = 0;
+        do{ 
+            bad_tcb_t *wake = __dequeue_delayq_head();
 
-    switch (status) {
-
-        case BAD_SYSTICK_DELAY_WAKE_PENDING:{
-            bad_tcb_t *wake_list = 0;
-            do{ 
-                bad_tcb_t *wake = __dequeue_delayq_head();
-             
-                if(wake->cbptr){
-                    bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
-                                                        BAD_TASK_HANDLE_GEN(wake->generation);
-                    wake->cbptr(wake_handle,wake->args);
-                    wake->cbptr = 0;
-                    wake->args = 0;
-                }
-
-                wake->counter = wake->ticks_to_change;
-                __enqueue_by_prio(&wake_list,wake,BAD_RTOS_MISC_READYQ_HEAD);
-            }while(kernel_cb.delayq && !kernel_cb.delayq->counter);
-            __merge_queues(&kernel_cb.readyq,wake_list);
-            __sched_try_update();
-            break;
-        }
-        case BAD_SYSTICK_BOTH:{
-            bad_tcb_t *wake_list = 0;
-            do{ 
-                bad_tcb_t *wake = __dequeue_delayq_head();
-
-                if(wake->cbptr){
-                    bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
-                                                        BAD_TASK_HANDLE_GEN(wake->generation);
-                    wake->cbptr(wake_handle,wake->args);
-                    wake->cbptr = 0;
-                    wake->args = 0;
-                }
-
-                wake->counter = wake->ticks_to_change;
-                __enqueue_by_prio(&wake_list,wake,BAD_RTOS_MISC_READYQ_HEAD);
-            }while(kernel_cb.delayq && !kernel_cb.delayq->counter);
-            __merge_queues(&kernel_cb.readyq,wake_list);
-        }
-        /* fallthrough */
-        case BAD_SYSTICK_TIMEFRAME_PENDING:{
-            if(kernel_cb.next){//todo check if this is needed
-                if(kernel_cb.readyq->raised_priority < kernel_cb.next->raised_priority){
-                    __enqueue_by_prio(&kernel_cb.readyq, kernel_cb.next, BAD_RTOS_MISC_READYQ_HEAD);
-                    __sched_update(__dequeue_head(&kernel_cb.readyq,BAD_RTOS_MISC_READYQ_HEAD));
-                }
-                return;
+            if(wake->cbptr){
+                bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
+                                                    BAD_TASK_HANDLE_GEN(wake->generation);
+                wake->cbptr(wake_handle,wake->args);
+                wake->cbptr = 0;
+                wake->args = 0;
             }
 
-            if(kernel_cb.readyq&&(kernel_cb.readyq->raised_priority <= kernel_cb.curr->raised_priority)){
-                __enqueue_by_prio(&kernel_cb.readyq,kernel_cb.curr,BAD_RTOS_MISC_READYQ_HEAD);
-                __sched_update(__dequeue_head(&kernel_cb.readyq,BAD_RTOS_MISC_READYQ_HEAD));
-            }else{
-                kernel_cb.curr->counter = kernel_cb.curr->ticks_to_change;
-            }
-            break;
+            wake->counter = wake->ticks_to_change;
+            __enqueue_by_prio(&wake_list,wake,BAD_RTOS_MISC_READYQ_HEAD);
+        }while(kernel_cb.delayq && !kernel_cb.delayq->counter);
+
+        __merge_queues(&kernel_cb.readyq,wake_list);
+    }
+    if (status & 0x1) {
+        kernel_cb.curr->counter = kernel_cb.curr->ticks_to_change;
+    }    
+
+    if(kernel_cb.next){
+        if(kernel_cb.readyq->raised_priority < kernel_cb.next->raised_priority){
+            __enqueue_by_prio(&kernel_cb.readyq, kernel_cb.next, BAD_RTOS_MISC_READYQ_HEAD);
+            __sched_update(__dequeue_head(&kernel_cb.readyq,BAD_RTOS_MISC_READYQ_HEAD));
         }
+        return;
+    }
+
+    if(kernel_cb.readyq && 
+        kernel_cb.readyq->raised_priority + (status == BAD_SYSTICK_DELAY_WAKE_PENDING)
+        <= kernel_cb.curr->raised_priority ){
+        __enqueue_by_prio(&kernel_cb.readyq,kernel_cb.curr,BAD_RTOS_MISC_READYQ_HEAD);
+        __sched_update(__dequeue_head(&kernel_cb.readyq,BAD_RTOS_MISC_READYQ_HEAD));
     }
 }
 /**
@@ -2343,8 +2304,6 @@ bad_rtos_status_t nbsem_take(bad_nbsem_t *nbsem){
         }
     }while(__strex(counter-1, &nbsem->counter));
 
-    DMB;
-
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
 }
@@ -2366,8 +2325,6 @@ bad_rtos_status_t nbsem_put(bad_nbsem_t *nbsem){
     do{
         counter = __ldrex(&nbsem->counter);
     }while(__strex(counter+1, &nbsem->counter));
-
-    DMB;
 
     CONTEX_SWITCH_BARIER_RELEASE;
     return BAD_RTOS_STATUS_OK;
@@ -2590,56 +2547,93 @@ __asm__ (
 //pendsv isr
 void __attribute__((naked)) pendsv_isr(){ 
     __asm__ volatile(
-        "mov r0,%0              \n"
+        "movs r0,%0             \n"
         "msr basepri,r0         \n"
         "isb                    \n"
         "mrs r0,psp             \n"
+#ifdef BAD_RTOS_USE_FPU
         "tst lr,#0x10           \n"
         "it eq                  \n"
         "vstmdbeq r0!, {s16-s31}\n"
+#endif
         "stmdb r0!, {r4-r11,lr} \n"
         "ldr r4,=%1             \n"
         "ldr r3,[r4,#4]         \n"
         "str r0,[r3]            \n"
         "ldr r1,[r4,#8]         \n" 
         "ldr r0,[r1]            \n"  
-        "mov r3,#0              \n"
-        "str r3,[r4,#8]         \n"
+        "movs r12,#0            \n"
+        "str r12,[r4,#8]         \n"
         "str r1,[r4,#4]         \n"
         "ldmia r0!, {r4-r11,lr} \n"
+#ifdef BAD_RTOS_USE_FPU
         "tst lr,#0x10           \n"
         "it eq                  \n"
         "vldmiaeq r0!, {s16-s31}\n"
-        "str r0,[r1]            \n"
+#endif
         "msr psp,r0             \n"
-        "msr basepri,r3         \n"
-        "isb                    \n"
-        "dmb                    \n"
+#ifdef BAD_RTOS_USE_MPU
+        "ldr r0, =%2            \n"
+        "ldr r2, [r1,#4]        \n"
+        "orr r2, #0x14          \n"
+        "ldr r3, =%3            \n"
+        "stmia r0!,{r2,r3}      \n"
+        "ldr r1,[r1,#48]        \n"
+        "ldmia r1!,{r2,r3}      \n"
+        "stmia r0!,{r2,r3}      \n"
+        "ldmia r1!,{r2,r3}      \n"
+        "stmia r0!,{r2,r3}      \n"
+        "ldmia r1!,{r2,r3}      \n"
+        "stmia r0!,{r2,r3}      \n"
+        "dsb                    \n"
+#endif
+        "msr basepri,r12        \n"
         "bx lr                  \n"
         ".ltorg                 \n"
         :
         :"i" (CRITICAL_MASK), "i"(&kernel_cb)
-        : "memory"
+#ifdef BAD_RTOS_USE_MPU
+          ,"i"(&MPU->RBAR),"i"(STACK_RASR)
+#endif
+        : 
     );
 }
 
-//first task second stage init
-__asm__(
-".thumb_func                    \n"
-".global __init_second_stage    \n"
-"__init_second_stage:           \n"
-    "ldr r1,=__estack           \n"
-    "msr msp,r1                 \n"
-    "ldr r3,=kernel_cb          \n"
-    "ldr r3,[r3,#4]             \n"
-    "ldr r0,[r3]                \n"
-    "ldmia r0!,{r4-r11,lr}      \n"
-    "str r0,[r2]                \n"
-    "msr psp, r0                \n"
-    "bx lr                      \n"
-    ".ltorg                     \n"
-);
 
+void __attribute__((naked)) __init_second_stage(){
+    __asm__ volatile(
+        "ldr r1,=__estack           \n"
+        "msr msp,r1                 \n"
+        "ldr r1,=kernel_cb          \n"
+        "ldr r1,[r1,#4]             \n"
+        "ldr r0,[r1]                \n"
+        "ldmia r0!,{r4-r11,lr}      \n"
+        "msr psp, r0                \n"
+#ifdef BAD_RTOS_USE_MPU
+        "ldr r0,=%0                 \n"
+        "ldr r2,[r1,#4]             \n"
+        "orr r2,#0x14               \n"
+        "ldr r3,=%1                 \n"
+        "stmia r0!,{r2,r3}          \n"
+        "ldr r1,[r1,#48]            \n"
+        "ldmia r1!,{r2,r3}          \n"
+        "stmia r0!,{r2,r3}          \n"
+        "ldmia r1!,{r2,r3}          \n"
+        "stmia r0!,{r2,r3}          \n"
+        "ldmia r1!,{r2,r3}          \n"
+        "stmia r0!,{r2,r3}          \n"
+        "dsb                        \n"
+#endif
+        "bx lr                      \n"
+        ".ltorg                     \n"
+        :
+        :
+#ifdef BAD_RTOS_USE_MPU
+            "i"(&MPU->RBAR),"i"(STACK_RASR)
+#endif
+        :
+    );
+}
 void __attribute__((naked)) systick_isr(){
     __asm__ volatile(
         "ldr r3,=%0         \n"
@@ -2690,31 +2684,6 @@ void __attribute__((naked)) systick_isr(){
     );
 }
 
-#ifdef BAD_RTOS_USE_MPU
-static inline __attribute__((always_inline)) void __task_mpu_apply_perms(bad_tcb_t *tcb) {
-    void* rbar_ptr = (void*)&MPU->RBAR;
-
-    __asm__ volatile( 
-        "ldr   r2, [%1, #4]           \n" 
-        "orr   r2, r2, #0x14          \n" 
-        "stmia %0!, {r2, %2}          \n" 
-        
-        "ldr   r0, [%1, #48]          \n" 
-        
-        "ldmia r0!, {r2, r3}          \n" 
-        "stmia %0!, {r2, r3}          \n" 
-        "ldmia r0!, {r2, r3}          \n" 
-        "stmia %0!, {r2, r3}          \n" 
-        "ldmia r0!, {r2, r3}          \n" 
-        "stmia %0!, {r2, r3}          \n" 
-        
-        : "+r" (rbar_ptr)                 // %0
-        : "r" (tcb),                      // %1
-          "r" (STACK_RASR)               // %2
-        : "r0", "r2", "r3", "memory" 
-    );
-}
-#endif
 
 //helpers for specific common operations
 
@@ -2790,9 +2759,6 @@ static void __attribute__((used)) svc_c(uint8_t svc, uint32_t* stack){
             __set_control(0x1);
             __restore_basepri(0);
             kernel_cb.curr = __dequeue_head(&kernel_cb.readyq,BAD_RTOS_MISC_READYQ_HEAD);
-#ifdef BAD_RTOS_USE_MPU
-            __task_mpu_apply_perms(kernel_cb.curr);
-#endif 
             __asm volatile("b __init_second_stage");
             break;
         }

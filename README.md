@@ -23,10 +23,8 @@ void bad_user_setup(){
     bad_task_descr_t task1_descr = {
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
-        .dyn_stack = 1,
         .entry = task1,
         .regions = task1_regions,
-        .region_count = MPU_REGIONS_SIZE(task1),
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY
     };
@@ -49,7 +47,7 @@ bad_rtos_start();
 ## Notes
  - bad_rtos_start() can only be called in the translation unit where implementation was included
  - API is written with static and or zero initilisation in mind, no need to call stuff_init on everything, read the comments for more information
- - If mpu is not used you can easily remove linker file and startup code dependencies by removing section attributes from definitions and adding attribute aligned(8) to stactic stacks macro and heaps and replace my headers with the CMIS one
+ - If mpu is not used you can easily remove linker file and startup code dependencies by removing section attributes from definitions and adding attribute aligned(8) to stactic stacks macro and heaps and replace my headers with the CMSIS one
 
 
 You can freely modify or copy whatever you need.

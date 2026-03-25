@@ -95,7 +95,6 @@ void bad_user_setup(){
     bad_task_descr_t task1_descr = {
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
-        .dyn_stack = 1,
         .entry = task1,
         .regions = task1_regions,
         .ticks_to_change = 500,
@@ -113,11 +112,10 @@ void bad_user_setup(){
     bad_task_descr_t task3_descr = {
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
-        .dyn_stack = 1,
         .entry = task3,
         .regions = task1_regions,
         .ticks_to_change = 500,
-        .base_priority = IDLE_TASK_PRIO - 1
+        .base_priority = IDLE_TASK_PRIO + 1
     };
     task3h = task_make(&task3_descr);
 }

@@ -169,9 +169,6 @@ typedef struct{
 #ifdef BAD_RTOS_USE_MPU
     const mpu_region_t *regions;
 #endif
-#if defined (BAD_RTOS_USE_KHEAP)
-    uint8_t dyn_stack;
-#endif
     uint8_t base_priority;
 }bad_task_descr_t;
 
@@ -290,7 +287,7 @@ static uint32_t task_name##_stack[size/sizeof(uint32_t)] __attribute__((section(
  * @param[in] bad_task_descr_t * Pointer to a descriptor object
  *
  * @retval  bad_task_handle_t Task handle
- * @retval  BAD_TASK_HANDLE_INVALID_HANDLE (-1) on allocation falure 
+ * @retval  BAD_TASK_HANDLE_INVALID_HANDLE (-1) on falure 
  */
 extern bad_task_handle_t task_make(bad_task_descr_t *descr);
 
@@ -1932,8 +1929,7 @@ ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
     new_task->base_priority = args->base_priority;
     new_task->raised_priority = args->base_priority;
 #if defined (BAD_RTOS_USE_KHEAP)
-    new_task->dyn_stack = args->dyn_stack;
-    if(args->dyn_stack){
+    if(!args->stack){
 #ifdef BAD_RTOS_USE_MPU
         if(args->stack_size < 128){
             __tcb_slab_free(new_task);    
@@ -1942,11 +1938,16 @@ ALWAYS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
 #endif
 
         new_task->stack = __kernel_alloc(args->stack_size);
+        new_task->dyn_stack = 1;
     }else{
+        new_task->dyn_stack = 0;
         new_task->stack = args->stack;
     }
 
 #else
+    if(!args->stack){
+        return BAD_TASK_HANDLE_INVALID_HANDLE    
+    }
     new_task->stack = args->stack;
 #endif
 #ifdef BAD_RTOS_USE_MPU

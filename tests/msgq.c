@@ -124,7 +124,6 @@ void bad_user_setup(){
     bad_task_descr_t task1_descr = {
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
-        .dyn_stack = 1,
         .entry = task1,
         .regions = task1_regions,
         .ticks_to_change = 500,

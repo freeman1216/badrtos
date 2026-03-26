@@ -122,6 +122,8 @@ typedef uint32_t bad_task_handle_t;
 typedef void (*taskptr)(void * par) ;
 typedef void (*cbptr)(bad_task_handle_t handle,void * par);
 
+
+
 // main fat struct of the program
 typedef struct bad_tcb{
     // stack pointer, doesnt really reflect the actual one when running, actual one is + 32
@@ -143,6 +145,9 @@ typedef struct bad_tcb{
     volatile uint32_t counter;
 #if defined (BAD_RTOS_USE_MPU)
     const mpu_region_t *regions;
+#endif
+#ifdef BAD_RTOS_USE_MUTEX
+    struct bad_tcb **blocked_on;
 #endif
     bad_rtos_misc_t misc;
     bad_rtos_delayq_misc_t delayq_misc;
@@ -171,6 +176,7 @@ typedef struct{
 #endif
     uint8_t base_priority;
 }bad_task_descr_t;
+
 
 #ifdef BAD_RTOS_USE_MUTEX
 typedef struct bad_mutex{
@@ -2079,6 +2085,25 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
     return BAD_RTOS_STATUS_OK;
 }
 
+ALWAYS_STATIC void __mutex_update_owner_pos(bad_tcb_t *owner){
+    bad_tcb_t **reinsert;
+    switch(owner->misc){
+        case BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER:
+        case BAD_RTOS_MISC_SEM_BLOCKEDQ_MEMBER:{
+            reinsert = owner->blocked_on;
+            break;
+        }
+        case BAD_RTOS_MISC_READYQ_MEMBER:{
+            reinsert = &kernel_cb.readyq;
+        }
+        default:{
+            return;
+        }
+    }
+    __remove_entry(reinsert,owner,owner->misc);
+    __enqueue_by_prio(reinsert,owner,owner->misc);
+}
+
 ALWAYS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, uint32_t delay){
     if(!mut){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
@@ -2088,9 +2113,11 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, uint32_t delay){
         kernel_cb.curr->mutex_count++;
         return BAD_RTOS_STATUS_OK;
     }
+    
     if(mut->owner == kernel_cb.curr){
         return BAD_RTOS_STATUS_RECURSIVE_TAKE;
     }
+
     if(delay == UINT32_MAX){
         return BAD_RTOS_STATUS_WOULD_BLOCK;
     }
@@ -2101,11 +2128,12 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, uint32_t delay){
         __delayq_enqueue( kernel_cb.curr, delay);
     }
 
-
+    kernel_cb.curr->blocked_on = &mut->blockedq;
     __enqueue_by_prio(&mut->blockedq,kernel_cb.curr, BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD);
     __sched_update(__dequeue_head(&kernel_cb.readyq ,BAD_RTOS_MISC_READYQ_HEAD));
     if(kernel_cb.curr->raised_priority < mut->owner->raised_priority){
-        mut->owner->raised_priority = kernel_cb.curr->raised_priority; 
+        mut->owner->raised_priority = kernel_cb.curr->raised_priority;
+        __mutex_update_owner_pos(mut->owner);
     }
 
 
@@ -2123,8 +2151,7 @@ ALWAYS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
     }
 
     mut->owner = __dequeue_head(&mut->blockedq ,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_HEAD);
-    kernel_cb.curr->mutex_count--;
-    if(!kernel_cb.curr->mutex_count){
+    if(!--kernel_cb.curr->mutex_count){
         kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
     }
 
@@ -2233,6 +2260,10 @@ ALWAYS_STATIC bad_rtos_status_t __sem_take(bad_sem_t *sem, uint32_t delay){
             kernel_cb.curr->cbptr = __sem_timeout_cb;
             __delayq_enqueue( kernel_cb.curr, delay);
         }
+
+#ifdef BAD_RTOS_USE_MUTEX
+        kernel_cb.curr->blocked_on = &sem->blockedq;
+#endif
         __enqueue_by_prio(&sem->blockedq,kernel_cb.curr, BAD_RTOS_MISC_SEM_BLOCKEDQ_HEAD);
         __sched_update(__dequeue_head(&kernel_cb.readyq ,BAD_RTOS_MISC_READYQ_HEAD));
         return BAD_RTOS_STATUS_OK;

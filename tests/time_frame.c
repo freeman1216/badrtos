@@ -47,7 +47,7 @@ static inline void __periph_setup(){
 
 static inline void __timer_setup(){
     basic_timer_setup(BTIM10,16393,1525,BTIMER_UPDATE);
-    tim_enable(BTIM10);
+    //tim_enable(BTIM10);
     nvic_set_interrupt_priority(NVIC_TIM1_UP_TIM10_INTR, 2);
     nvic_enable_interrupt(NVIC_TIM1_UP_TIM10_INTR);
 }
@@ -61,7 +61,6 @@ void tim10_usr(){
     bad_task_descr_t task3_descr = {
         .stack = 0,
         .stack_size = 128,
-        .dyn_stack = 1,
         .entry = task3,
         .ticks_to_change = 500,
         .base_priority = 0

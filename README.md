@@ -1,7 +1,7 @@
 # BADRTOS
 
 ## What is this?  
-A lightweight header-only rtos scheduler for Cortex M4 mcus (in this case STM32F411CE) with usual RTOS primitives 
+A lightweight header-only rtos scheduler for Cortex M4/M33 mcus (in this case STM32F411CE/STM32H562VG) with usual RTOS primitives 
 ## Features
 - Priority driven scheduler
 - MPU support

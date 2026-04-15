@@ -1,12 +1,29 @@
 CC = arm-none-eabi-gcc
-CFLAGS = -ggdb -Wall -Wextra  -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fno-strict-aliasing 
-LDFLAGS = -Tstm32f411ceu6.ld -nolibc --specs=nosys.specs -nostartfiles  
-INCLUDES = -Iinc/ 
+CFLAGS =  -ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard
+F411_CFLAGS = -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -DBAD_PLATFORM_F411
+H562_CFLAGS = -mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -DBAD_PLATFORM_H562
+LDFLAGS = -nolibc --specs=nosys.specs -nostartfiles
+F411_LDFLAGS = -Tstm32f411ceu6.ld
+H562_LDFLAGS = -Tstm32h562vgt6.ld 
+
+INCLUDES = -Iinc/
 
 SRC_DIR = src
 BUILD_DIR = build
 
-SOURCES = $(SRC_DIR)/startup_stm32f411ceu6.c 
+F411_SOURCES = $(SRC_DIR)/startup_stm32f411ceu6.c tests/platform_setup_f411.c
+H562_SOURCES = $(SRC_DIR)/startup_stm32h562vgt6.c tests/platform_setup_h562.c
+
+PLATFORM_UPPER := $(shell echo $(PLATFORM) | tr a-z A-Z)
+
+ifndef PLATFORM
+  $(error provide a platform like `make PLATFORM=h562 main`)
+endif
+
+
+SOURCES = $($(PLATFORM_UPPER)_SOURCES)
+LDFLAGS += $($(PLATFORM_UPPER)_LDFLAGS)
+CFLAGS	+= $($(PLATFORM_UPPER)_CFLAGS)
 
 
 MAIN_SRC = $(SOURCES) $(SRC_DIR)/main.c
@@ -138,21 +155,14 @@ ifeq ($(CURRBIN),)
 	$(error "debug must follow a build target, e.g. `make exti debug`")
 endif
 
-	@echo "Flashing $(CURRBIN)..."
-	openocd -f /usr/share/openocd/scripts/interface/stlink.cfg \
-	-f /usr/share/openocd/scripts/target/stm32f4x.cfg \
-		-c "program $(CURRBIN) reset exit"
-
-	@echo "Starting OpenOCD server..."
-	openocd -f /usr/share/openocd/scripts/interface/stlink.cfg \
-	-f /usr/share/openocd/scripts/target/stm32f4x.cfg & \
 	gf2 $(CURRBIN) \
-		-ex "target remote localhost:3333" \
-		-ex "monitor reset halt" 
-	
-	pkill openocd
-
-
+		-ex "target extended-remote /dev/ttyBmpGdb" \
+		-ex "monitor auto_scan"\
+		-ex "attach 1"\
+		-ex "load"\
+		-ex "b main"\
+		-ex "set mem inaccessible-by-default off"\
+		-ex "run"
 
 
 ###############

@@ -1,50 +1,6 @@
-#define BAD_PLLM (25)
-#define BAD_PLLN (400)
-#define BAD_PLLQ (10)
-#define BAD_PLLP (PLLP4)
-
-#define BAD_AHB_PRE     (HPRE_DIV_1)
-#define BAD_APB1_PRE    (PPRE_DIV_2)
-#define BAD_APB2_PRE    (PPRE_DIV_1)
-
-#define BAD_USART_IMPLEMENTATION
-#define BAD_FLASH_IMPLEMENTATION
-#define BAD_RCC_IMPLEMENTATION
-#define BAD_GPIO_IMPLEMENTATION
-
-#define BAD_HARDFAULT_USE_UART
-#define BAD_HARDFAULT_ISR_IMPLEMENTATION
-
+#include "platform_setup.h"
 #define BAD_RTOS_IMPLEMENTATION
-#include "badrtos.h"
-
-#define UART_GPIO_PORT          (GPIOA)
-#define UART1_TX_PIN            (9)
-#define UART1_RX_PIN            (10)
-#define UART1_TX_AF             (7)
-#define UART1_RX_AF             (7)
-
-#define BADHAL_FLASH_LATENCY (FLASH_LATENCY_3ws)
-
-#define BAD_RTOS_AHB1_PERIPEHRALS    (RCC_AHB1_GPIOA|RCC_AHB1_DMA2|RCC_AHB1_GPIOB)
-#define BAD_RTOS_APB2_PERIPHERALS    (RCC_APB2_USART1|RCC_APB2_SPI1|RCC_APB2_SYSCFGEN|RCC_APB2_TIM10)
-
-static inline void __main_clock_setup(){
-    flash_acceleration_setup(BADHAL_FLASH_LATENCY, FLASH_DCACHE_ENABLE, FLASH_ICACHE_ENABLE);
-    rcc_sysclock_setup();
-}
-
-
-static inline void __periph_setup(){
-    rcc_set_ahb1_clocking(BAD_RTOS_AHB1_PERIPEHRALS);
-    io_setup_pin(UART_GPIO_PORT, UART1_TX_PIN, MODER_af, UART1_TX_AF, OSPEEDR_high_speed, PUPDR_no_pull, OTYPR_push_pull);
-    io_setup_pin(UART_GPIO_PORT, UART1_RX_PIN, MODER_af, UART1_RX_AF, OSPEEDR_high_speed, PUPDR_no_pull, OTYPR_push_pull);
-    rcc_set_apb2_clocking(BAD_RTOS_APB2_PERIPHERALS);
-}
-
-START_TASK_MPU_REGIONS_DEFINITIONS(task1)
-    DEFINE_PERIPH_ACCESS_REGION(task1,USART1_BASE, sizeof(USART_typedef_t))
-END_TASK_MPU_REGIONS(task1)
+#include "platform_include.h"
 
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
@@ -89,7 +45,7 @@ void bad_user_setup(){
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
         .entry = task1,
-        .regions = task1_regions,
+        //.regions = task1_regions,
         .ticks_to_change = 500,
         .base_priority = TASK1_PRIORITY
     };
@@ -116,8 +72,7 @@ void bad_user_setup(){
 
 int __attribute__((noinline)) main(){
     __DISABLE_INTERUPTS;
-    __main_clock_setup();
-    __periph_setup();
+    __platform_setup();
     __ENABLE_INTERUPTS;
     bad_rtos_start();
     //task_yield();

@@ -26,6 +26,15 @@
 
 #define __IO volatile
 
+#define BAD_PLLM (25)
+#define BAD_PLLN (400)
+#define BAD_PLLQ (10)
+#define BAD_PLLP (PLLP4)
+
+#define BAD_AHB_PRE     (HPRE_DIV_1)
+#define BAD_APB1_PRE    (PPRE_DIV_2)
+#define BAD_APB2_PRE    (PPRE_DIV_1)
+
 #define CLOCK_SPEED 100000000UL         //100MHZ
 #define FALLBACK_CLOCK_SPEED 16000000UL //16MHZ
 //hw interrupts (triggered by hardware and handled in drivers)

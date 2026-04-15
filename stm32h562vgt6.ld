@@ -1,15 +1,11 @@
-MEMORY
-{
-    ROM (rx) : ORIGIN = 0x8000000, LENGTH  = 512k
-    RAM (rwx) : ORIGIN = 0x20000000, LENGTH  = 128k
+MEMORY {
+  ROM(rx) : ORIGIN = 0x08000000, LENGTH = 1024k
+  RAM(rwx) : ORIGIN = 0x20000000, LENGTH = 640k
 }
-__eram = ORIGIN(RAM) + LENGTH(RAM);
-__estack = __eram;
 
+__estack     = ORIGIN(RAM) + LENGTH(RAM);       /* stack points to end of SRAM */
 
-
-SECTIONS
-{   
+SECTIONS {
     .text : ALIGN(4)
     {   KEEP(*(.ivt))
         *(.text)
@@ -17,7 +13,7 @@ SECTIONS
         __etext = .;
     } > ROM
 
-    .kernel_bss (NOLOAD) : ALIGN(4)
+    .kernel_bss (NOLOAD) : ALIGN(32)
     {
         __kernel_bss = .;
         *(.kernel_bss)
@@ -25,7 +21,6 @@ SECTIONS
         __ekernel_bss = .;
         __static_stacks = .;
         *(.static_stacks)
-        . = ALIGN(32);
         __estatic_stacks = .;
     } > RAM
     
@@ -52,7 +47,7 @@ SECTIONS
     {
         __bss = .;
         *(.bss)
-        . = ALIGN(4);
+        . = ALIGN(32);
         __ebss = .;
     } > RAM 
     
@@ -68,6 +63,14 @@ SECTIONS
         __eramfunc = .;
         
     } >RAM AT > ROM
+    
+    .dma_buffs (NOLOAD) :ALIGN(32)
+    {
+        __dma_buffs = .; 
+        *(.dma_buffs)
+        . = ALIGN(32);
+        __edma_buffs = .;'
+    } > RAM
 
     .init_array :ALIGN(4)
     {  
@@ -83,4 +86,5 @@ SECTIONS
         . = ALIGN(4);
         __erodata = .;
     } > ROM
-}
+
+} 

@@ -44,7 +44,7 @@
 #define BAD_HAL_USE_FPU
 #endif 
 #endif
-#include "badhal.h"
+#include "badhal_f411.h"
 
 #if BAD_RTOS_MAX_TASKS < 2
     #error "Number of tasks must be > 1 to accomodate for idle task"

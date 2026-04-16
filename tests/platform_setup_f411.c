@@ -43,4 +43,5 @@ static inline void __tick_setup(){
 void __platform_setup() {
     __main_clock_setup();
     __periph_setup();
+    __tick_setup();
 }

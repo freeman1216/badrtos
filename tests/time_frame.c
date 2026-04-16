@@ -24,9 +24,10 @@ void task2(){
 TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
 
 START_TASK_MPU_REGIONS_DEFINITIONS(task2)
+#if defined(BAD_PLATFORM_H562) || defined(BAD_PLATFORM_H562)
     DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
+#endif
 END_TASK_MPU_REGIONS(task2)
-
 
 void bad_user_setup(){
     bad_task_descr_t task1_descr = {

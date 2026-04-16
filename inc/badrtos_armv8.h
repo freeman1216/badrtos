@@ -1118,7 +1118,7 @@ typedef enum{
 #define BAD_SCB_CPACR_FPU_SHIFT                 20U
 #define BAD_SCB_CPACR_FPU_MASK                  (0xF << BAD_SCB_CPACR_FPU_SHIFT)
 /**
- * \b __fpu_setup
+ * \b __scb_trigger_pendsv 
  *
  * Internal function that triggers PendSV exception
  * 

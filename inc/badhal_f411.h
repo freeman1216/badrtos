@@ -143,7 +143,7 @@ ALWAYS_STATIC void SCB_trigger_pendsv(){
     SCB->ICSR = SCB_ICSR_PENDSVSET;
 }
 
-ALWAYS_STATIC void SCB_set_priority_grouping(SCB_prio_grouping_t prio){
+ALWAYS_STATIC void scb_set_priority_grouping(SCB_prio_grouping_t prio){
     uint32_t reg_value  =  SCB->AIRCR;                                                
     reg_value &= ~(SCB_AIRCR_VECTKEY_MASK | SCB_AIRCR_PRIGROUP_MASK);  
     reg_value  =  (reg_value | (0x5FA << SCB_AIRCR_VECTKEY_SHIFT) | (prio << SCB_AIRCR_PRIGROUP_SHIFT));              
@@ -152,11 +152,11 @@ ALWAYS_STATIC void SCB_set_priority_grouping(SCB_prio_grouping_t prio){
     OPT_BARRIER;
 }
 
-ALWAYS_STATIC void SCB_set_core_interrupt_priority(SCB_core_interrupt_t intr,SCB_interrupt_priority_t prio){
+ALWAYS_STATIC void scb_set_core_interrupt_priority(SCB_core_interrupt_t intr,SCB_interrupt_priority_t prio){
     SCB->SHP[intr] = prio << 4;
 }
 
-ALWAYS_STATIC void SCB_set_fpu_permission_level(SCB_FPU_permission_t perms){
+ALWAYS_STATIC void scb_set_fpu_permission_level(SCB_FPU_permission_t perms){
     SCB->CPACR &= ~(SCB_CPACR_FPU_MASK);
     SCB->CPACR |= perms << SCB_CPACR_FPU_SHIFT;
     DSB;

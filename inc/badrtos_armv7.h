@@ -1272,6 +1272,9 @@ BAD_RTOS_STATIC void __bad_rtos_mpu_default_setup(){
     BAD_MPU->RNR = 0;
     BAD_MPU->RBAR = 0x20000000;
     BAD_MPU->RASR = BAD_MPU_RASR_ENABLE|(0x10)<<1|BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB_SHAREABLE|BAD_MPU_AP_FULL_ACCESS;
+    //preload stack rasr
+    BAD_MPU->RNR = 4;
+    BAD_MPU->RASR = BAD_RTOS_STACK_RASR;
     //flash region
     BAD_MPU->RNR = 5;
     BAD_MPU->RBAR = 0x08000000;
@@ -1283,9 +1286,8 @@ BAD_RTOS_STATIC void __bad_rtos_mpu_default_setup(){
     //kernel data structures
     BAD_MPU->RNR = 7;
     BAD_MPU->RBAR = 0x20000000;
-    BAD_MPU->RASR = BAD_MPU_RASR_ENABLE|
-        BAD_MPU_FIND_SIZE(BAD_MPU_PREV_POW2(&__static_stacks - &__kernel_bss))|
-        BAD_MPU_AP_PRIV_RW_UNPRIV_FAULT|BAD_MPU_RASR_XN;
+    BAD_MPU->RASR = BAD_MPU_FIND_SIZE(BAD_MPU_PREV_POW2(&__static_stacks - &__kernel_bss))|
+        BAD_MPU_AP_PRIV_RO_UNPRIV_FAULT|BAD_MPU_RASR_XN;
     __mpu_enable_with_default_map();
 }
 #endif
@@ -2772,26 +2774,50 @@ __asm__(
 
 void __attribute__((naked)) BAD_RTOS_SVC_HANDLER_NAME(){ 
     __asm__ volatile(
-        "svc_isr:               \n"
-            "tst lr, #4         \n"
-            "beq isr            \n"
-        "thread:                \n"
-            "mrs r1, psp        \n"
-            "mov r2, #0xF0      \n"      
-            "b common           \n"
-        "isr:                   \n"
-            "mrs r1, msp        \n"
-            "mov r2, #0x0F      \n"    
-        "common:                \n"
-            "ldr r3, [r1,#24]   \n"
-            "sub r3, #2         \n"
-            "ldrb r0, [r3]      \n"
-            "and r0, r2         \n"      
-            "b  svc_c           \n"
+"svc_isr:                       \n"
+        "tst lr, #4             \n"
+        "beq isr                \n"
+"thread:                        \n"
+        "mrs r1, psp            \n"
+        "mov r2, #0xF0          \n"      
+        "b common               \n"
+"isr:                           \n"
+        "mrs r1, msp            \n"
+        "mov r2, #0x0F          \n"    
+"common:                        \n"
+        "ldr r3, [r1,#24]       \n"
+        "sub r3, #2             \n"
+        "ldrb r0, [r3]          \n"
+        "and r0, r2             \n"     
+#ifdef BAD_RTOS_USE_MPU
+        "cmp r0,#0xf            \n"
+        "beq already_unlocked   \n"
+        "sub sp,#16             \n"
+        "stmia sp,{r4,r5,lr}    \n"
+        "ldr r4, =%0            \n"
+        "ldr r5,[r4]            \n"
+        "bic r2,r5,#1           \n"
+        "str r2,[r4]            \n"
+        "dsb                    \n"
+        "isb                    \n"
+        "bl svc_c               \n"
+        "str r5,[r4]            \n"
+        "ldmia sp,{r4,r5,lr}    \n"
+        "add sp,#16             \n"
+        "bx lr                  \n"
+#endif
+"already_unlocked:              \n"
+        "b svc_c                \n"
+        :
+        :
+#ifdef BAD_RTOS_USE_MPU
+         "i"(&BAD_MPU->RASR)
+#endif
+        :
     );
 }
 //pendsv isr
-void __attribute__((naked)) pendsv_isr(){ 
+void __attribute__((naked)) BAD_RTOS_PENDSV_HANDLER_NAME(){ 
     __asm__ volatile(
         "movs r0,%0             \n"
         "msr basepri,r0         \n"
@@ -2803,6 +2829,14 @@ void __attribute__((naked)) pendsv_isr(){
         "vstmdbeq r0!, {s16-s31}\n"
 #endif
         "stmdb r0!, {r4-r11,lr} \n"
+#ifdef BAD_RTOS_USE_MPU
+        "ldr r12,=%2            \n"
+        "ldr r11,[r12,#8]       \n"
+        "bic r10,r11,#1         \n"
+        "str r10,[r12,#8]       \n"
+        "dsb                    \n"
+        "isb                    \n"
+#endif
         "ldr r4,=%1             \n"
         "ldr r3,[r4,#4]         \n"
         "str r0,[r3]            \n"
@@ -2811,6 +2845,20 @@ void __attribute__((naked)) pendsv_isr(){
         "movs r12,#0            \n"
         "str r12,[r4,#8]        \n"
         "str r1,[r4,#4]         \n"
+ #ifdef BAD_RTOS_USE_MPU
+        "ldr r3,[r1,#4]         \n"
+        "ldr r12,=%2            \n"
+        "add r2,r12,#4          \n"
+        "orrs r3,#0x14          \n"
+        "str r3,[r2]            \n" 
+        "ldr r1,[r1,#48]        \n"
+        "ldmia r1!,{r5-r10}     \n"
+        "stmia r2!,{r5-r10}     \n"
+        "mov r7,#7              \n"
+        "str r7,[r12]           \n"
+        "str r11,[r12,#8]       \n"
+        "dsb                    \n"
+#endif       
         "ldmia r0!, {r4-r11,lr} \n"
 #ifdef BAD_RTOS_USE_FPU
         "tst lr,#0x10           \n"
@@ -2818,28 +2866,13 @@ void __attribute__((naked)) pendsv_isr(){
         "vldmiaeq r0!, {s16-s31}\n"
 #endif
         "msr psp,r0             \n"
-#ifdef BAD_RTOS_USE_MPU
-        "ldr r0, =%2            \n"
-        "ldr r2, [r1,#4]        \n"
-        "orr r2, #0x14          \n"
-        "ldr r3, =%3            \n"
-        "stmia r0!,{r2,r3}      \n"
-        "ldr r1,[r1,#48]        \n"
-        "ldmia r1!,{r2,r3}      \n"
-        "stmia r0!,{r2,r3}      \n"
-        "ldmia r1!,{r2,r3}      \n"
-        "stmia r0!,{r2,r3}      \n"
-        "ldmia r1!,{r2,r3}      \n"
-        "stmia r0!,{r2,r3}      \n"
-        "dsb                    \n"
-#endif
         "msr basepri,r12        \n"
         "bx lr                  \n"
         ".ltorg                 \n"
         :
         :"i" (CRITICAL_MASK), "i"(&kernel_cb)
 #ifdef BAD_RTOS_USE_MPU
-          ,"i"(&BAD_MPU->RBAR),"i"(BAD_RTOS_STACK_RASR)
+          ,"i"(&BAD_MPU->RNR)
 #endif
         : 
     );
@@ -2853,29 +2886,30 @@ void __attribute__((naked)) __init_second_stage(){
         "ldr r1,=kernel_cb          \n"
         "ldr r1,[r1,#4]             \n"
         "ldr r0,[r1]                \n"
+ #ifdef BAD_RTOS_USE_MPU
+        "ldr r3,[r1,#4]             \n"
+        "ldr r12,=%0                \n"
+        "add r2,r12,#4              \n"
+        "orr r3,#0x14               \n"
+        "str r3,[r2]                \n"
+        "ldr r1,[r1,#48]            \n"
+        "ldmia r1!,{r5-r10}         \n"
+        "stmia r2!,{r5-r10}         \n"
+        "mov r7,#7                  \n"
+        "str r7,[r12]               \n"
+        "ldr r1,[r12,#8]            \n"
+        "orrs r1,#1                 \n"
+        "str r1,[r12,#8]            \n"
+        "dsb                        \n"
+#endif       
         "ldmia r0!,{r4-r11,lr}      \n"
         "msr psp, r0                \n"
-#ifdef BAD_RTOS_USE_MPU
-        "ldr r0,=%0                 \n"
-        "ldr r2,[r1,#4]             \n"
-        "orr r2,#0x14               \n"
-        "ldr r3,=%1                 \n"
-        "stmia r0!,{r2,r3}          \n"
-        "ldr r1,[r1,#48]            \n"
-        "ldmia r1!,{r2,r3}          \n"
-        "stmia r0!,{r2,r3}          \n"
-        "ldmia r1!,{r2,r3}          \n"
-        "stmia r0!,{r2,r3}          \n"
-        "ldmia r1!,{r2,r3}          \n"
-        "stmia r0!,{r2,r3}          \n"
-        "dsb                        \n"
-#endif
         "bx lr                      \n"
         ".ltorg                     \n"
         :
         :
 #ifdef BAD_RTOS_USE_MPU
-            "i"(&BAD_MPU->RBAR),"i"(BAD_RTOS_STACK_RASR)
+            "i"(&BAD_MPU->RNR)
 #endif
         :
     );
@@ -2890,8 +2924,15 @@ void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME(){
         "bx lr              \n"
         "cont:              \n"
         "movs r0,%1         \n"
-        "mrs r12,basepri    \n"
         "msr basepri,r0     \n"
+#ifdef BAD_RTOS_USE_MPU
+        "push {r4,r5}       \n"
+        "ldr r5, =%2        \n"
+        "ldr r4,[r5]        \n"
+        "bic r0,r4,#1       \n"
+        "str r0,[r5]        \n"
+        "dsb                \n"
+#endif 
         "isb                \n"
         "movs r0,#0         \n"
         "ldr r1,[r3]        \n"
@@ -2918,7 +2959,13 @@ void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME(){
         "skip_delayq:       \n"
         "cbnz r0,back_branch\n"
         "back:              \n"
-        "msr basepri,r12    \n"
+#ifdef BAD_RTOS_USE_MPU
+        "str r4,[r5]        \n"
+        "pop {r4,r5}        \n"
+        "dsb                \n"
+#endif
+        "movs r0,#0         \n"
+        "msr basepri,r0     \n"
         "bx lr              \n"
         "back_branch:       \n"
         "svc 0xF            \n"
@@ -2926,6 +2973,9 @@ void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME(){
         ".ltorg             \n"
         :
         : "i" (&kernel_cb),"i"(CRITICAL_MASK)
+#ifdef BAD_RTOS_USE_MPU
+        , "i" (&BAD_MPU->RASR)
+#endif
         :
     );
 }

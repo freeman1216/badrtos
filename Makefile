@@ -1,5 +1,5 @@
 CC = arm-none-eabi-gcc
-CFLAGS =  -ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard
+CFLAGS =  -O2 -ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard
 F411_CFLAGS = -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -DBAD_PLATFORM_F411
 H562_CFLAGS = -mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -DBAD_PLATFORM_H562
 LDFLAGS = -nolibc --specs=nosys.specs -nostartfiles
@@ -11,15 +11,12 @@ INCLUDES = -Iinc/
 SRC_DIR = src
 BUILD_DIR = build
 
-F411_SOURCES = $(SRC_DIR)/startup_stm32f411ceu6.c tests/platform_setup_f411.c
+F411_SOURCES = $(SRC_DIR)/startup_stm32f411ceu6.c 
 H562_SOURCES = $(SRC_DIR)/startup_stm32h562vgt6.c tests/platform_setup_h562.c
 
+PLATFORM ?= f411
+
 PLATFORM_UPPER := $(shell echo $(PLATFORM) | tr a-z A-Z)
-
-ifndef PLATFORM
-  $(error provide a platform like `make PLATFORM=h562 main`)
-endif
-
 
 SOURCES = $($(PLATFORM_UPPER)_SOURCES)
 LDFLAGS += $($(PLATFORM_UPPER)_LDFLAGS)
@@ -39,6 +36,10 @@ MSGQ_SRC = $(SOURCES) tests/msgq.c
 NBSEM_DELETE_SRC = $(SOURCES) tests/nbsem_delete.c
 BUDDY_SRC = $(SOURCES) tests/buddy.c
 FPU_SRC = $(SOURCES) tests/fpu.c
+UNBLOCK_FROM_ISR_SRC = $(SOURCES) tests/unblock_from_isr.c
+MSGQ_POST_FROM_ISR_SRC = $(SOURCES) tests/msgq_post_from_isr.c
+SEM_POST_FROM_ISR_SRC = $(SOURCES) tests/sem_post_from_isr.c
+EVENT_BARRIER_FIRE_FROM_ISR_SRC = $(SOURCES) tests/event_barrier_fire_from_isr.c
 
 MAIN_BIN = $(BUILD_DIR)/main.elf
 TIME_FRAME_BIN = $(BUILD_DIR)/time_frame.elf
@@ -53,6 +54,10 @@ MSGQ_BIN = $(BUILD_DIR)/msgq.elf
 NBSEM_DELETE_BIN = $(BUILD_DIR)/nbsem_delete.elf
 BUDDY_BIN = $(BUILD_DIR)/buddy.elf
 FPU_BIN = $(BUILD_DIR)/fpu.elf
+UNBLOCK_FROM_ISR_BIN = $(BUILD_DIR)/unblock_from_isr.elf
+MSGQ_POST_FROM_ISR_BIN = $(BUILD_DIR)/msgq_post_from_isr.elf
+SEM_POST_FROM_ISR_BIN = $(BUILD_DIR)/sem_post_from_isr.elf
+EVENT_BARRIER_FIRE_FROM_ISR_BIN = $(BUILD_DIR)/event_barrier_fire_from_isr.elf
 
 PRIMARY_GOAL := $(firstword $(MAKECMDGOALS))
 
@@ -110,6 +115,18 @@ $(BUDDY_BIN): $(BUILD_DIR)
 $(FPU_BIN): $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(FPU_SRC) -o $@
 
+$(UNBLOCK_FROM_ISR_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(UNBLOCK_FROM_ISR_SRC) -o $@
+
+$(MSGQ_POST_FROM_ISR_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(MSGQ_POST_FROM_ISR_SRC) -o $@
+
+$(SEM_POST_FROM_ISR_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(SEM_POST_FROM_ISR_SRC) -o $@
+
+$(EVENT_BARRIER_FIRE_FROM_ISR_BIN): $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(INCLUDES) $(EVENT_BARRIER_FIRE_FROM_ISR_SRC) -o $@
+
 .PHONY: main
 main: clean $(MAIN_BIN)
 
@@ -148,6 +165,18 @@ buddy: clean $(BUDDY_BIN)
 
 .PHONY:	fpu
 fpu: clean $(FPU_BIN)
+
+.PHONY:	unblock_from_isr
+unblock_from_isr: clean $(UNBLOCK_FROM_ISR_BIN)
+
+.PHONY:	msgq_post_from_isr
+msgq_post_from_isr: clean $(MSGQ_POST_FROM_ISR_BIN)
+
+.PHONY:	sem_post_from_isr
+sem_post_from_isr: clean $(SEM_POST_FROM_ISR_BIN)
+
+.PHONY:	event_barrier_fire_from_isr
+event_barrier_fire_from_isr: clean $(EVENT_BARRIER_FIRE_FROM_ISR_BIN)
 
 .PHONY: debug
 debug:

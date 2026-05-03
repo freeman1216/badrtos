@@ -3,7 +3,7 @@
 
 #ifdef BAD_PLATFORM_F411
 #include "badrtos_armv7.h"
-#include "badhal_f411.h"
+#include "platform_setup_f411.h"
 #endif
 
 #ifdef BAD_PLATFORM_H562

@@ -1,5 +1,5 @@
 #define BAD_RTOS_ISR_TEST
-#include "platform_setup.h"
+#define BAD_RTOS_PLATFORM_IMPLEMENTATION
 #define BAD_RTOS_IMPLEMENTATION
 #include "platform_include.h"
 
@@ -14,40 +14,38 @@ void cb(bad_task_handle_t unused0, void* unused1){
 } 
 void task1(){
     while (1) {
-        task_delay(200, cb, 0);
         task_block();
+        unblocked++;
     }
 }
 
 void task2(){
     while (1) {
-        bad_rtos_status_t status;
-        status = task_unblock(task1h);
-        if(status == BAD_RTOS_STATUS_OK){
-            unblocked++;
-            task_yield();
-        }else{
-            task_delay(200, 0, 0);
-        }
+    
     }
 }
 
+void isr_test(){
+    task_unblock_from_isr(task1h);
+}
 
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 1
 #define TASK2_STACK_SIZE 1024
 #define TASK1_STACK_SIZE 1024
+
+TASK_STATIC_STACK(task1, TASK1_STACK_SIZE);
 TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
-
-START_TASK_MPU_REGIONS_DEFINITIONS(task2)
-#if defined(BAD_PLATFORM_H562) || defined(BAD_PLATFORM_H562T)
-    DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
-#endif
-END_TASK_MPU_REGIONS(task2)
-
+//
+// START_TASK_MPU_REGIONS_DEFINITIONS(task2)
+// #if defined(BAD_PLATFORM_H562) || defined(BAD_PLATFORM_H562T)
+//     DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
+// #endif
+// END_TASK_MPU_REGIONS(task2)
+//
 void bad_user_setup(){
     bad_task_descr_t task1_descr = {
-        .stack = 0,
+        .stack = task1_stack,
         .stack_size = TASK1_STACK_SIZE,
         .entry = task1,
         //.regions = task1_regions,
@@ -59,7 +57,7 @@ void bad_user_setup(){
         .stack = task2_stack,
         .stack_size = TASK2_STACK_SIZE,
         .entry = task2,
-        .regions = task1_regions,
+        //.regions = task1_regions,
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY
     };
@@ -68,9 +66,7 @@ void bad_user_setup(){
 
 
 int __attribute__((noinline)) main(){
-    __DISABLE_INTERUPTS;
     __platform_setup();
-    __ENABLE_INTERUPTS;
     bad_rtos_start();
     //task_yield();
     while(1){

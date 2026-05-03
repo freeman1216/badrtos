@@ -22,6 +22,7 @@
 #define BAD_HAL_USE_SYSCFG
 #define BAD_HAL_USE_BTIMER
 #define BAD_HAL_USE_CRC
+#define BAD_HAL_USE_DBGMCU
 //common defines
 
 #define __IO volatile
@@ -693,6 +694,16 @@ ALWAYS_STATIC void nvic_enable_interrupt(NVIC_programmable_intr_t intrnum)
     DSB;
     OPT_BARRIER;
    
+}
+
+ALWAYS_STATIC void nvic_clear_interrupt(NVIC_programmable_intr_t intrnum)
+{
+    uint8_t ICPR_idx = intrnum >> 5;
+    uint32_t ICPR_intr_mask = 1 << (intrnum & 0x1F);
+    OPT_BARRIER;
+    NVIC->ICPR[ICPR_idx] = ICPR_intr_mask;
+    DSB;
+    OPT_BARRIER;
 }
 
 ALWAYS_STATIC void nvic_disable_interrupt(NVIC_programmable_intr_t intrnum)
@@ -1452,6 +1463,8 @@ typedef enum{
 
 #define TIM_CR_CEN 0x1
 
+#define TIM_SR_UIF 0x1
+
 ALWAYS_STATIC void tim_enable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 |= TIM_CR_CEN; 
 }
@@ -1467,6 +1480,7 @@ BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,ui
     TIM->PSC = bpsc; 
     TIM->EGR = 1;
     TIM->DIER = intr;
+    TIM->SR &= ~TIM_SR_UIF;
 }
 #endif
 
@@ -1488,6 +1502,48 @@ typedef struct {
 
 ALWAYS_STATIC void crc_reset(){
     CRC->CR = CRC_CR_RESET;
+}
+
+#endif
+
+#ifdef BAD_HAL_USE_DBGMCU
+
+typedef struct{
+    __IO uint32_t IDCODE;  
+    __IO uint32_t CR;      
+    __IO uint32_t APB1FZ;  
+    __IO uint32_t APB2FZ;  
+}DBGMCU_typedef_t;
+
+typedef enum{
+    DBGMCU_APB1_TIM2   = 0x1,
+    DBGMCU_APB1_TIM3   = 0x2,
+    DBGMCU_APB1_TIM4   = 0x4,
+    DBGMCU_APB1_TIM5   = 0x8,
+    DBGMCU_APB1_RTC    = 0x400,
+    DBGMCU_APB1_WWDG   = 0x800,
+    DBGMCU_APB1_IWDG   = 0x1000,
+    DBGMCU_APB1_I2C1   = 0x200000,
+    DBGMCU_APB1_I2C2   = 0x400000,
+    DBGMCU_APB1_I2C3   = 0x800000,
+}DBGMCU_APB1_peripherals_t;
+
+typedef enum{
+    DBGMCU_APB2_TIM1       = 0x1,
+    DBGMCU_APB2_TIM9       = 0x10000,
+    DBGMCU_APB2_TIM10      = 0x20000,
+    DBGMCU_APB2_TIM11      = 0x40000,
+}DBGMCU_APB2_peripherals_t;
+
+#define DBGMCU_BASE 0xE0042000UL
+#define DBGMCU ((__IO DBGMCU_typedef_t *)DBGMCU_BASE)
+
+ALWAYS_STATIC void dbgmcu_freeze_apb1_periphals(__IO DBGMCU_typedef_t *dbgmcu, DBGMCU_APB1_peripherals_t peripherals){
+    dbgmcu->APB1FZ = peripherals;
+}
+
+ALWAYS_STATIC void dbgmcu_freeze_apb2_periphals(__IO DBGMCU_typedef_t *dbgmcu, DBGMCU_APB2_peripherals_t peripherals){
+    dbgmcu->APB2FZ = peripherals;
 }
 
 #endif
@@ -1851,7 +1907,6 @@ STRONG_ISR(exti9_5_isr){
 #ifdef BTIMER_USE_TIM10_USR
 void tim10_usr();
 #endif
-#define TIM_SR_UIF 0x1
 STRONG_ISR(tim1_up_tim10_isr){
     if(BTIM10->SR & TIM_SR_UIF ){
       BTIM10->SR &= ~TIM_SR_UIF;

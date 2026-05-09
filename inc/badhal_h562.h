@@ -8,7 +8,7 @@
 //Core
 #define BAD_HAL_USE_SCB
 #define BAD_HAL_USE_MPU
-//#define BAD_HAL_USE_NVIC
+#define BAD_HAL_USE_NVIC
 #define BAD_HAL_USE_SYSTICK
 //#define BAD_HAL_USE_FPU
 //Peripherals
@@ -17,6 +17,8 @@
 #define BAD_HAL_USE_USART
 #define BAD_HAL_USE_GPIO
 #define BAD_HAL_USE_PWR
+#define BAD_HAL_USE_BTIMER
+#define BAD_HAL_USE_DBGMCU
 //common defines
 
 #define __IO volatile
@@ -192,20 +194,20 @@ ALWAYS_STATIC void scb_set_fpu_permission_level(SCB_FPU_permission_t perms){
 
 typedef struct
 {
-  __IO uint32_t TYPE;                   /*!< Offset: 0x000 (R/ )  MPU Type Register */
-  __IO uint32_t CTRL;                   /*!< Offset: 0x004 (R/W)  MPU Control Register */
-  __IO uint32_t RNR;                    /*!< Offset: 0x008 (R/W)  MPU Region Number Register */
-  __IO uint32_t RBAR;                   /*!< Offset: 0x00C (R/W)  MPU Region Base Address Register */
-  __IO uint32_t RLAR;                   /*!< Offset: 0x010 (R/W)  MPU Region Limit Address Register */
-  __IO uint32_t RBAR_A1;                /*!< Offset: 0x014 (R/W)  MPU Region Base Address Register Alias 1 */
-  __IO uint32_t RLAR_A1;                /*!< Offset: 0x018 (R/W)  MPU Region Limit Address Register Alias 1 */
-  __IO uint32_t RBAR_A2;                /*!< Offset: 0x01C (R/W)  MPU Region Base Address Register Alias 2 */
-  __IO uint32_t RLAR_A2;                /*!< Offset: 0x020 (R/W)  MPU Region Limit Address Register Alias 2 */
-  __IO uint32_t RBAR_A3;                /*!< Offset: 0x024 (R/W)  MPU Region Base Address Register Alias 3 */
-  __IO uint32_t RLAR_A3;                /*!< Offset: 0x028 (R/W)  MPU Region Limit Address Register Alias 3 */
+    __IO uint32_t TYPE;                   /*!< Offset: 0x000 (R/ )  MPU Type Register */
+    __IO uint32_t CTRL;                   /*!< Offset: 0x004 (R/W)  MPU Control Register */
+    __IO uint32_t RNR;                    /*!< Offset: 0x008 (R/W)  MPU Region Number Register */
+    __IO uint32_t RBAR;                   /*!< Offset: 0x00C (R/W)  MPU Region Base Address Register */
+    __IO uint32_t RLAR;                   /*!< Offset: 0x010 (R/W)  MPU Region Limit Address Register */
+    __IO uint32_t RBAR_A1;                /*!< Offset: 0x014 (R/W)  MPU Region Base Address Register Alias 1 */
+    __IO uint32_t RLAR_A1;                /*!< Offset: 0x018 (R/W)  MPU Region Limit Address Register Alias 1 */
+    __IO uint32_t RBAR_A2;                /*!< Offset: 0x01C (R/W)  MPU Region Base Address Register Alias 2 */
+    __IO uint32_t RLAR_A2;                /*!< Offset: 0x020 (R/W)  MPU Region Limit Address Register Alias 2 */
+    __IO uint32_t RBAR_A3;                /*!< Offset: 0x024 (R/W)  MPU Region Base Address Register Alias 3 */
+    __IO uint32_t RLAR_A3;                /*!< Offset: 0x028 (R/W)  MPU Region Limit Address Register Alias 3 */
     uint32_t RESERVED0[1];
-  __IO uint32_t MAIR[2];
-
+    __IO uint32_t MAIR[2];
+    
 } MPU_typedef_t;
 
 
@@ -646,15 +648,15 @@ typedef enum{
 #define PPRE3_MASK (0x7<<12)
 
 #define RCC_ADDITIONAL_PRESCALERS_BITMASK(PLLN, PLLP, PLLQ, PLLR)({ \
-    _Static_assert(PLLN-1 && PLLN-1 < 0x200 && PLLN-1 > 0x3,"PLLN invalid");\
-    _Static_assert(PLLP-1 < 0x40 && PLLP-1 && (PLLP-1) & 0x1 ,"PLLP invalid");\
-    _Static_assert(PLLQ-1 < 0x40,"PLLQ invalid");\
-    _Static_assert(PLLR-1 < 0x40,"PLLR invalid");\
-    (PLLN_SET(PLLN-1) | PLLP_SET(PLLP-1) | PLLQ_SET(PLLQ-1) | PLLR_SET(PLLR-1));\
+_Static_assert(PLLN-1 && PLLN-1 < 0x200 && PLLN-1 > 0x3,"PLLN invalid");\
+_Static_assert(PLLP-1 < 0x40 && PLLP-1 && (PLLP-1) & 0x1 ,"PLLP invalid");\
+_Static_assert(PLLQ-1 < 0x40,"PLLQ invalid");\
+_Static_assert(PLLR-1 < 0x40,"PLLR invalid");\
+(PLLN_SET(PLLN-1) | PLLP_SET(PLLP-1) | PLLQ_SET(PLLQ-1) | PLLR_SET(PLLR-1));\
 })
 
 #define RCC_BUS_PRESCALERS_BITMASK(hpre, ppre1, ppre2, ppre3)({ \
-    (HPRE_SET(hpre) | PPRE1_SET(ppre1) | PPRE2_SET(ppre2) | PPRE3_SET(ppre3));\
+(HPRE_SET(hpre) | PPRE1_SET(ppre1) | PPRE2_SET(ppre2) | PPRE3_SET(ppre3));\
 })
 
 
@@ -707,7 +709,7 @@ ALWAYS_STATIC void rcc_bus_prescalers_setup(__IO RCC_typedef_t *rcc,uint32_t pre
 }
 
 ALWAYS_STATIC void rcc_pll_setup(__IO RCC_typedef_t *rcc, PLL_num_t num, uint8_t PLLM, RCC_PLL_features_t features, uint32_t prescalers){
-   
+    
     if(!(rcc->CR & HSION_MASK) && (features & PLL_FEATURE_SOURCE_HSE) == PLL_FEATURE_SOURCE_HSI){
         rcc_enable_hsi(rcc);
     }
@@ -715,11 +717,11 @@ ALWAYS_STATIC void rcc_pll_setup(__IO RCC_typedef_t *rcc, PLL_num_t num, uint8_t
     if(!(rcc->CR & HSEON_MASK) && (features & PLL_FEATURE_SOURCE_HSE) == PLL_FEATURE_SOURCE_HSE){
         rcc_enable_hse(rcc);
     }
-
+    
     if(!(rcc->CR & CSION_MASK) &&  (features & PLL_FEATURE_SOURCE_HSE) == PLL_FEATURE_SOURCE_CSI){
         rcc_enable_csi(rcc);
     }
-
+    
     if(rcc->CR & PLL1ON_MASK << num){
         rcc->CR &=~(PLL1ON_MASK << num); 
         while (rcc->CR & PLL1RDY_MASK << num);
@@ -741,7 +743,7 @@ ALWAYS_STATIC void rcc_sysclock_set_input(__IO RCC_typedef_t *rcc, SW_state_t in
 
 
 extern void rcc_default_sysclock_setup(__IO RCC_typedef_t *rcc){
-
+    
     uint32_t default_prescalers = RCC_ADDITIONAL_PRESCALERS_BITMASK(BAD_PLLN, BAD_PLLP, BAD_PLLQ, BAD_PLLR);
     rcc_pll_setup(rcc,RCC_PLL1,BAD_PLLM,BAD_RCC_DEFAULT_SETTINGS,default_prescalers);
     uint32_t default_bus_prescalers = RCC_BUS_PRESCALERS_BITMASK(BAD_HPRE,BAD_PPRE1,BAD_PPRE2,BAD_PPRE3);
@@ -811,6 +813,25 @@ extern void pwr_setup_vos(__IO PWR_typedef_t *pwr, PWR_vos_state_t vos){
 #endif
 
 #ifdef BAD_HAL_USE_NVIC
+
+typedef struct
+{
+    __IO uint32_t ISER[16U];              /*!< Offset: 0x000 (R/W)  Interrupt Set Enable Register */
+    uint32_t RESERVED0[16U];
+    __IO uint32_t ICER[16U];              /*!< Offset: 0x080 (R/W)  Interrupt Clear Enable Register */
+    uint32_t RSERVED1[16U];
+    __IO uint32_t ISPR[16U];              /*!< Offset: 0x100 (R/W)  Interrupt Set Pending Register */
+    uint32_t RESERVED2[16U];
+    __IO uint32_t ICPR[16U];              /*!< Offset: 0x180 (R/W)  Interrupt Clear Pending Register */
+    uint32_t RESERVED3[16U];
+    __IO uint32_t IABR[16U];              /*!< Offset: 0x200 (R/W)  Interrupt Active bit Register */
+    uint32_t RESERVED4[16U];
+    __IO uint32_t ITNS[16U];              /*!< Offset: 0x280 (R/W)  Interrupt Non-Secure State Register */
+    uint32_t RESERVED5[16U];
+    __IO uint8_t  IPR[496U];              /*!< Offset: 0x300 (R/W)  Interrupt Priority Register (8Bit wide) */
+    uint32_t RESERVED6[580U];
+    __IO  uint32_t STIR;                   /*!< Offset: 0xE00 ( /W)  Software Trigger Interrupt Register */
+}  NVIC_typedef_t;
 
 typedef enum{
     WWDG_INTR                 = 0,      /*!< Window WatchDog interrupt                                         */
@@ -956,25 +977,6 @@ typedef enum{
     NVIC_PRIO15
 } NVIC_prio_t;
 
-typedef struct
-{
-  __IO uint32_t ISER[16U];              /*!< Offset: 0x000 (R/W)  Interrupt Set Enable Register */
-        uint32_t RESERVED0[16U];
-  __IO uint32_t ICER[16U];              /*!< Offset: 0x080 (R/W)  Interrupt Clear Enable Register */
-        uint32_t RSERVED1[16U];
-  __IO uint32_t ISPR[16U];              /*!< Offset: 0x100 (R/W)  Interrupt Set Pending Register */
-        uint32_t RESERVED2[16U];
-  __IO uint32_t ICPR[16U];              /*!< Offset: 0x180 (R/W)  Interrupt Clear Pending Register */
-        uint32_t RESERVED3[16U];
-  __IO uint32_t IABR[16U];              /*!< Offset: 0x200 (R/W)  Interrupt Active bit Register */
-        uint32_t RESERVED4[16U];
-  __IO uint32_t ITNS[16U];              /*!< Offset: 0x280 (R/W)  Interrupt Non-Secure State Register */
-        uint32_t RESERVED5[16U];
-  __IO uint8_t  IPR[496U];              /*!< Offset: 0x300 (R/W)  Interrupt Priority Register (8Bit wide) */
-        uint32_t RESERVED6[580U];
-  __IO  uint32_t STIR;                   /*!< Offset: 0xE00 ( /W)  Software Trigger Interrupt Register */
-}  NVIC_typedef_t;
-
 #define NVIC_BASE (0xE000E100UL)
 
 #define NVIC ((NVIC_typedef_t*) NVIC_BASE)
@@ -1000,8 +1002,20 @@ ALWAYS_STATIC void nvic_disable_interrupt(NVIC_programmable_intr_t intrnum)
     OPT_BARRIER;
 } 
 
+
+ALWAYS_STATIC void nvic_clear_interrupt(NVIC_programmable_intr_t intrnum)
+{
+    uint8_t ICPR_idx = intrnum >> 5;
+    uint32_t ICPR_intr_mask = 1 << (intrnum & 0x1F);
+    OPT_BARRIER;
+    NVIC->ICPR[ICPR_idx] = ICPR_intr_mask;
+    DSB;
+    OPT_BARRIER;
+}
+
+
 ALWAYS_STATIC void nvic_set_interrupt_priority(NVIC_programmable_intr_t intrnum, NVIC_prio_t prio){
-    NVIC->IP[intrnum] = prio << 4;
+    NVIC->IPR[intrnum] = prio << 4;
     DSB;
     OPT_BARRIER;
 }
@@ -1012,10 +1026,10 @@ ALWAYS_STATIC void nvic_set_interrupt_priority(NVIC_programmable_intr_t intrnum,
 #ifdef BAD_HAL_USE_SYSTICK
 
 typedef struct {
-  __IO uint32_t CTRL;                   
-  __IO uint32_t LOAD;                   
-  __IO uint32_t VAL;                    
-  __IO uint32_t CALIB;                  
+    __IO uint32_t CTRL;                   
+    __IO uint32_t LOAD;                   
+    __IO uint32_t VAL;                    
+    __IO uint32_t CALIB;                  
 } Systick_typedef_t;
 
 #define SYSTICK_BASE (0xE000E010UL)
@@ -1052,9 +1066,9 @@ ALWAYS_STATIC void systick_disable(){
 
 #ifndef BAD_USART_DEF
 #ifdef BAD_USART_STATIC
-    #define BAD_USART_DEF ALWAYS_STATIC
+#define BAD_USART_DEF ALWAYS_STATIC
 #else
-    #define BAD_USART_DEF extern
+#define BAD_USART_DEF extern
 #endif
 #endif
 
@@ -1091,8 +1105,8 @@ typedef enum{
 
 
 #define USART_CALCULATE_BRR(baud,clock) \
-    (((uint16_t)((float)clock/(16*baud)) << 4) | \
-     (uint8_t)(((((float)clock/(16*baud)) - (uint16_t)((float)clock/(16*baud)))*16) + 0.5f))
+(((uint16_t)((float)clock/(16*baud)) << 4) | \
+(uint8_t)(((((float)clock/(16*baud)) - (uint16_t)((float)clock/(16*baud)))*16) + 0.5f))
 
 
 #define USART_BRR_115200 USART_CALCULATE_BRR(115200UL,CLOCK_SPEED)
@@ -1153,10 +1167,10 @@ BAD_USART_DEF void uart_disable(__IO USART_typedef_t * USART);
 BAD_USART_DEF void uart_putchar_polling(__IO USART_typedef_t*,char);
 BAD_USART_DEF char uart_getchar_polling(__IO USART_typedef_t*);
 BAD_USART_DEF void uart_setup(__IO USART_typedef_t * USART,
-    uint16_t BRR,
-    USART_feature_t features,
-    USART_misc_t misc,
-    USART_interrupt_flags_t interrupt);
+                              uint16_t BRR,
+                              USART_feature_t features,
+                              USART_misc_t misc,
+                              USART_interrupt_flags_t interrupt);
 BAD_USART_DEF void uart_send_str_polling(__IO USART_typedef_t* USART ,const char* str);
 BAD_USART_DEF void uart_send_hex_32bit(__IO USART_typedef_t* USART,uint32_t value);
 BAD_USART_DEF void uart_send_dec_unsigned_32bit(__IO USART_typedef_t *USART ,uint32_t value);
@@ -1183,10 +1197,10 @@ BAD_USART_DEF char uart_getchar_polling(__IO USART_typedef_t* USART){
 }
 
 BAD_USART_DEF void uart_setup(__IO USART_typedef_t * USART,
-    uint16_t BRR,
-    USART_feature_t features,
-    USART_misc_t misc,
-    USART_interrupt_flags_t interrupts)
+                              uint16_t BRR,
+                              USART_feature_t features,
+                              USART_misc_t misc,
+                              USART_interrupt_flags_t interrupts)
 {
     USART->CR1 = features| interrupts;
     USART->BRR = BRR;
@@ -1216,13 +1230,13 @@ BAD_USART_DEF void uart_send_dec_unsigned_32bit(__IO USART_typedef_t *USART ,uin
     char buff[11];
     char *write = buff+11;
     *--write = 0;
-
+    
     do{ 
         *--write = (value%10)+'0';
         value/=10;
     }
     while (value!=0);
-
+    
     uart_send_str_polling(USART, write);
     uart_send_str_polling(USART, "\r\n");
 }
@@ -1338,6 +1352,157 @@ extern void io_setup_pin(__IO GPIO_typedef_t *GPIO, uint8_t pin_num, MODERx_stat
 
 #endif //BAD_HAL_USE_GPIO
 
+#ifdef BAD_HAL_USE_BTIMER
+
+#ifndef BAD_TIMER_DEF
+#ifdef BAD_TIMER_STATIC
+#define BAD_TIMER_DEF ALWAYS_STATIC
+#else
+#define BAD_TIMER_DEF extern
+#endif
+#endif
+
+typedef struct {
+    __IO uint32_t CR1;
+    __IO uint32_t CR2;
+    uint32_t PADDING0;
+    __IO uint32_t DIER;
+    __IO uint32_t SR;
+    __IO uint32_t EGR;
+    __IO uint32_t CCMR1;
+    __IO uint32_t CCER;
+    uint32_t PADDING1;
+    __IO uint32_t CNT;
+    __IO uint32_t PSC;
+    __IO uint32_t ARR;
+} BTIMER_typedef_t;
+
+typedef enum{
+    BTIMER_UPDATE = 0x1,
+}BTIMER_interrupts_t;
+
+#define BTIM6_BASE 0x40001000UL
+
+#define BTIM6 ((__IO BTIMER_typedef_t *)BTIM6_BASE)
+
+#define TIM_CR_CEN 0x1
+
+#define TIM_SR_UIF 0x1
+
+ALWAYS_STATIC void tim_enable(__IO BTIMER_typedef_t* TIM){
+    TIM->CR1 |= TIM_CR_CEN; 
+}
+
+ALWAYS_STATIC void tim_disable(__IO BTIMER_typedef_t* TIM){
+    TIM->CR1 &= ~TIM_CR_CEN;
+}
+
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
+#ifdef BAD_BTIMER_IMPLEMENTATION
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
+    TIM->ARR = barr;
+    TIM->PSC = bpsc; 
+    TIM->EGR = 1;
+    TIM->DIER = intr;
+    TIM->SR &= ~TIM_SR_UIF;
+}
+#endif
+
+#endif // BAD_HAL_USE_BTIMER
+
+#ifdef BAD_HAL_USE_DBGMCU
+
+typedef struct
+{
+    __IO uint32_t IDCODE;       /*!< MCU device ID code,                 Address offset: 0x00  */
+    __IO uint32_t CR;           /*!< Debug MCU configuration register,   Address offset: 0x04  */
+    __IO uint32_t APB1FZLR;     /*!< Debug MCU APB1 freeze register 1,   Address offset: 0x08  */
+    __IO uint32_t APB1FZHR;     /*!< Debug MCU APB1 freeze register 2,   Address offset: 0x0C  */
+    __IO uint32_t APB2FZR;      /*!< Debug MCU APB2 freeze register,     Address offset: 0x10  */
+    __IO uint32_t APB3FZR;      /*!< Debug MCU APB3 freeze register,     Address offset: 0x14  */
+    uint32_t RESERVED1[2]; /*!< Reserved,                                    0x18 - 0x1C  */
+    __IO uint32_t AHB1FZR;      /*!< Debug MCU AHB1 freeze register,     Address offset: 0x20  */
+    uint32_t RESERVED2[54]; /*!< Reserved,                                   0x24 - 0xF8  */
+    __IO uint32_t SR;           /*!< Debug MCU SR register,              Address offset: 0xFC  */
+    __IO uint32_t DBG_AUTH_HOST; /*!< Debug DBG_AUTH_HOST register,      Address offset: 0x100 */
+    __IO uint32_t DBG_AUTH_DEV;  /*!< Debug DBG_AUTH_DEV register,       Address offset: 0x104 */
+    __IO uint32_t DBG_AUTH_ACK;  /*!< Debug DBG_AUTH_ACK register,       Address offset: 0x108 */
+    uint32_t RESERVED3[945]; /*!< Reserved,                                 0x10C - 0xFCC */
+    __IO uint32_t PIDR4;       /*!< Debug MCU Peripheral ID register 4,  Address offset: 0xFD0 */
+    __IO uint32_t PIDR5;       /*!< Debug MCU Peripheral ID register 5,  Address offset: 0xFD4 */
+    __IO uint32_t PIDR6;       /*!< Debug MCU Peripheral ID register 6,  Address offset: 0xFD8 */
+    __IO uint32_t PIDR7;       /*!< Debug MCU Peripheral ID register 7,  Address offset: 0xFDC */
+    __IO uint32_t PIDR0;       /*!< Debug MCU Peripheral ID register 0,  Address offset: 0xFE0 */
+    __IO uint32_t PIDR1;       /*!< Debug MCU Peripheral ID register 1,  Address offset: 0xFE4 */
+    __IO uint32_t PIDR2;       /*!< Debug MCU Peripheral ID register 2,  Address offset: 0xFE8 */
+    __IO uint32_t PIDR3;       /*!< Debug MCU Peripheral ID register 3,  Address offset: 0xFEC */
+    __IO uint32_t CIDR0;       /*!< Debug MCU Component ID register 0,   Address offset: 0xFF0 */
+    __IO uint32_t CIDR1;       /*!< Debug MCU Component ID register 1,   Address offset: 0xFF4 */
+    __IO uint32_t CIDR2;       /*!< Debug MCU Component ID register 2,   Address offset: 0xFF8 */
+    __IO uint32_t CIDR3;       /*!< Debug MCU Component ID register 3,   Address offset: 0xFFC */
+} DBGMCU_typedef_t;
+
+typedef enum{
+    DBGMCU_APB1L_TIM2     = 0x1,
+    DBGMCU_APB1L_TIM3     = 0x2,
+    DBGMCU_APB1L_TIM4     = 0x4,
+    DBGMCU_APB1L_TIM5     = 0x8,
+    DBGMCU_APB1L_TIM6     = 0x10,
+    DBGMCU_APB1L_TIM7     = 0x20,
+    DBGMCU_APB1L_TIM12    = 0x40,
+    DBGMCU_APB1L_TIM13    = 0x80,
+    DBGMCU_APB1L_TIM14    = 0x100,
+    DBGMCU_APB1L_WWDG     = 0x800,
+    DBGMCU_APB1L_IWDG     = 0x1000,
+    DBGMCU_APB1L_I2C1     = 0x200000,
+    DBGMCU_APB1L_I2C2     = 0x400000,
+    DBGMCU_APB1L_I3C1     = 0x800000,
+}DBGMCU_APB1L_peripherals_t;
+
+typedef enum{
+    DBGMCU_APB1H_LPTIM2   = 0x20,
+}DBGMCU_APB1H_peripherals_t;
+
+typedef enum{
+    DBGMCU_APB2_TIM1     = 0x800,
+    DBGMCU_APB2_TIM8     = 0x2000,
+    DBGMCU_APB2_TIM15    = 0x10000,
+    DBGMCU_APB2_TIM16    = 0x20000,
+    DBGMCU_APB2_TIM17    = 0x40000,
+}DBGMCU_APB2_peripherals_t;
+
+typedef enum{
+    DBGMCU_APB3_I2C3     = 0x400,
+    DBGMCU_APB3_I2C4     = 0x800,
+    DBGMCU_APB3_LPTIM1   = 0x20000,
+    DBGMCU_APB3_LPTIM3   = 0x40000,
+    DBGMCU_APB3_LPTIM4   = 0x80000,
+    DBGMCU_APB3_LPTIM5   = 0x100000,
+    DBGMCU_APB3_LPTIM6   = 0x200000,
+    DBGMCU_APB3_RTCAPB   = 0x40000000,
+}DBGMCU_APB3_peripherals_t;
+
+#define DBGMCU_BASE (0x44024000UL)
+#define DBGMCU ((__IO DBGMCU_typedef_t *)DBGMCU_BASE)
+
+ALWAYS_STATIC void dbgmcu_freeze_apb1l_periphals(__IO DBGMCU_typedef_t *dbgmcu, DBGMCU_APB1L_peripherals_t peripherals){
+    dbgmcu->APB1FZLR = peripherals;
+}
+
+ALWAYS_STATIC void dbgmcu_freeze_apb1h_periphals(__IO DBGMCU_typedef_t *dbgmcu, DBGMCU_APB1H_peripherals_t peripherals){
+    dbgmcu->APB1FZHR = peripherals;
+}
+
+ALWAYS_STATIC void dbgmcu_freeze_apb2_periphals(__IO DBGMCU_typedef_t *dbgmcu, DBGMCU_APB2_peripherals_t peripherals){
+    dbgmcu->APB2FZR = peripherals;
+}
+
+ALWAYS_STATIC void dbgmcu_freeze_apb3_periphals(__IO DBGMCU_typedef_t *dbgmcu, DBGMCU_APB3_peripherals_t peripherals){
+    dbgmcu->APB3FZR = peripherals;
+}
+
+
+#endif
 //Interrupts
 //Hardfault interrupt
 //HardFault handler with optional UART logging.
@@ -1355,13 +1520,13 @@ extern void io_setup_pin(__IO GPIO_typedef_t *GPIO, uint8_t pin_num, MODERx_stat
 
 void __attribute__((naked)) isr_hardfault(){ 
     __asm volatile(
-        "cpsid i        \n"
-        "tst lr,#4      \n"
-        "ite eq         \n"
-        "mrseq r0,msp   \n"
-        "mrsne r0,psp   \n"
-        "b hardfault_c  \n"
-    );
+                   "cpsid i        \n"
+                   "tst lr,#4      \n"
+                   "ite eq         \n"
+                   "mrseq r0,msp   \n"
+                   "mrsne r0,psp   \n"
+                   "b hardfault_c  \n"
+                   );
 }
 
 void __attribute__((used)) hardfault_c(uint32_t* stack){
@@ -1386,53 +1551,53 @@ void __attribute__((used)) hardfault_c(uint32_t* stack){
     uart_send_str_polling(FAULT_LOG_UART,"HARDFAULT\r\n");
     uart_send_str_polling(FAULT_LOG_UART, "R0 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r0);
- 
+    
     uart_send_str_polling(FAULT_LOG_UART, "R1 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r1);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "R2 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r2);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "R3 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r3);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "R12 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r12);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "LR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, lr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "!!PC = ");
     uart_send_hex_32bit(FAULT_LOG_UART, pc&~(0x1));
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "xPSR =  ");
     uart_send_hex_32bit(FAULT_LOG_UART, psr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "SP = ");
     uart_send_hex_32bit(FAULT_LOG_UART, (uint32_t)stack);
-
-
-
+    
+    
+    
     uart_send_str_polling(FAULT_LOG_UART, "CFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, cfsr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "HFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, hfsr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "DFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, dfsr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "MMFAR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, mmfar);
-
+    
     uart_send_str_polling(FAULT_LOG_UART,"BFAR = " );
     uart_send_hex_32bit(FAULT_LOG_UART, bfar);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "AFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART,afsr );
 #endif
     while (1) {
-    
+        
     }
 }
 
@@ -1463,6 +1628,16 @@ STRONG_ISR(usart1_isr){
 #endif
     }
 }
+#endif
+
+#ifdef BTIMER_TIM6_ISR_IMPLEMENTATION
+void tim6_usr();
+
+STRONG_ISR(tim6_isr){
+    BTIM6->SR &= ~TIM_SR_UIF;
+    tim6_usr();
+}
+
 #endif
 
 #endif // !BAD_HAL_H

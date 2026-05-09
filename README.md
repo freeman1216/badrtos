@@ -4,11 +4,12 @@
 A lightweight header-only rtos scheduler for Cortex M4/M33 mcus (in this case STM32F411CE/STM32H562VG) with usual RTOS primitives 
 ## Features
 - Priority driven scheduler
+- No isr locks in the kernel
 - MPU support
 - Mutexes, semaphores, message queues
 - Software timers
-- Dynamic memory allocation using buddy allocator
-- Depends only on the linker file, startup code and some register definitions  
+- Dynamic memory allocation using buddy allocator and pools
+- Depends only on the linker file and startup code
 ## How to use it  
 1. Include the header and dependencies in your project.  
 2. Define "BAD_RTOS_IMPLEMENTATION" and include the header 
@@ -45,7 +46,7 @@ bad_rtos_start();
 ```
 
 ## Notes
- - bad_rtos_start() can only be called in the translation unit where implementation was included
- - API is written with static and or zero initilisation in mind, no need to call stuff_init on everything, read the comments for more information
+- bad_rtos_start() can only be called in the translation unit where implementation was included
+- API is written with static and or zero initilisation in mind, no need to call stuff_init on everything, read the comments for more information
 
 You can freely modify or copy whatever you need.

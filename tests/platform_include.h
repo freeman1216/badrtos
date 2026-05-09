@@ -8,7 +8,7 @@
 
 #ifdef BAD_PLATFORM_H562
 #include "badrtos_armv8.h"
-#include "badhal_h562.h"
+#include "platform_setup_h562.h"
 #endif
 
 #ifdef BAD_PLATFORM_H562T

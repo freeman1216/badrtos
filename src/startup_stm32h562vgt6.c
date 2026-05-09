@@ -20,6 +20,10 @@ extern unsigned int __eramfunc;
 extern unsigned int __kernel_bss;
 extern unsigned int __ekernel_bss;
 
+extern unsigned int __kernel_data;
+extern unsigned int __ekernel_data;
+extern unsigned int __rkernel_data;
+
 typedef void (*constructor_ptr)();
 
 extern constructor_ptr __init_array[];
@@ -164,6 +168,13 @@ static inline void data_init(){
     while (dest<&__edata) {
         *dest++ = *src++;
     }
+    
+    src = &__rkernel_data;
+    dest = &__kernel_data;
+    while (dest<&__ekernel_data) {
+        *dest++ = *src++;
+    }
+    
 }
 
 static inline void bss_init(){
@@ -171,7 +182,7 @@ static inline void bss_init(){
     while (ksrc < &__ekernel_bss) {
         *ksrc++ = 0; 
     }
-
+    
     unsigned int *src = &__bss;
     while (src<&__ebss) {
         *src++ = 0; 

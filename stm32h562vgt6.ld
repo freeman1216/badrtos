@@ -17,19 +17,31 @@ SECTIONS {
     {
         __kernel_bss = .;
         *(.kernel_bss)
-        . = ALIGN(32);
         __ekernel_bss = .;
-        __static_stacks = .;
+   
+    } > RAM
+
+    __rkernel_data = LOADADDR(.kernel_data);
+
+	.kernel_data : ALIGN(4) 
+	{
+		__kernel_data = .;
+		*(.kernel_data)
+		. = ALIGN(32);
+		__ekernel_data = .;
+	} > RAM AT > ROM
+
+	.static_stacks : ALIGN(8)
+	{
+		__static_stacks = .;
         *(.static_stacks)
         __estatic_stacks = .;
-    } > RAM
-    
+	}
 
     .heap : ALIGN(32)
     {
         __heap = .;
         *(.kheap)
-        *(.uheap)
     } > RAM
 
 
@@ -69,7 +81,7 @@ SECTIONS {
         __dma_buffs = .; 
         *(.dma_buffs)
         . = ALIGN(32);
-        __edma_buffs = .;'
+        __edma_buffs = .;
     } > RAM
 
     .init_array :ALIGN(4)

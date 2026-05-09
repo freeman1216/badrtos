@@ -1,5 +1,5 @@
-#include "platform_setup.h"
 #define BAD_RTOS_IMPLEMENTATION
+#define BAD_RTOS_PLATFORM_IMPLEMENTATION
 #include "platform_include.h"
 
 bad_task_handle_t task1h;
@@ -27,7 +27,7 @@ TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
 
 START_TASK_MPU_REGIONS_DEFINITIONS(task2)
 #if defined(BAD_PLATFORM_H562) || defined(BAD_PLATFORM_H562)
-    DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
+DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
 #endif
 END_TASK_MPU_REGIONS(task2)
 
@@ -61,8 +61,8 @@ int __attribute__((noinline)) main(){
     bad_rtos_start();
     //task_yield();
     while(1){
-
-    
+        
+        
         
     }
     return 0;

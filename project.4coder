@@ -1,0 +1,44 @@
+version(2);
+project_name = "BADRTOS";
+
+indent_width = "4";
+default_tab_width = "4";
+
+patterns =
+{
+    "*.c",
+    "*.cpp",
+    "*.h",
+    "*.inc",
+    "*.hpp",
+    "*.bat",
+    "*.sh",
+    "*.4coder",
+    "*.glsl",
+    "*.bfs",
+    "*.html",
+    "*.txt",
+    "*.md",
+    "*.mdesk",
+    "*.asm",
+};
+
+paths = {
+    {.path = ".", .recursive = false , .relative = true,}, 
+};
+
+load_paths ={
+    .linux = paths,
+};
+
+commands = {
+    .f2 = { .linux = "bash build.sh h562 time_frame debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f3 = { .linux = "bash build.sh f411 msgq_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+};
+
+fkey_command =
+{
+    .F1 = "f1",
+    .F2 = "f2",
+    .F3 = "f3",
+};

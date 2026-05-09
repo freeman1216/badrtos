@@ -17,24 +17,35 @@ SECTIONS
         __etext = .;
     } > ROM
 
-    .kernel_bss (NOLOAD) : ALIGN(4)
+    .kernel_bss (NOLOAD) : ALIGN(32)
     {
         __kernel_bss = .;
         *(.kernel_bss)
-        . = ALIGN(32);
         __ekernel_bss = .;
-        __static_stacks = .;
-        *(.static_stacks)
-        . = ALIGN(32);
-        __estatic_stacks = .;
+   
     } > RAM
-    
+
+    __rkernel_data = LOADADDR(.kernel_data);
+
+	.kernel_data : ALIGN(4) 
+	{
+		__kernel_data = .;
+		*(.kernel_data)
+		. = ALIGN(4096);
+		__ekernel_data = .;
+	} > RAM AT > ROM
+
+	.static_stacks : ALIGN(8)
+	{
+		__static_stacks = .;
+        *(.static_stacks)
+        __estatic_stacks = .;
+	}
 
     .heap : ALIGN(32)
     {
         __heap = .;
         *(.kheap)
-        *(.uheap)
     } > RAM
 
 

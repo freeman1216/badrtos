@@ -3105,8 +3105,9 @@ bad_rtos_status_t mutex_init(bad_mutex_t *mut){
     if(!mut){
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    mut->blockedq = (bad_link_node_t){0};
-    mut->owner = 0;
+    
+    *mut = (bad_mutex_t){0};
+    
     return BAD_RTOS_STATUS_OK;
 }
 
@@ -3139,9 +3140,11 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
     if(!kernel_cb.curr->mutex_count){
         kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
     }
-    mut->owner = 0;
+    
     
     __synchro_wake_all(&mut->blockedq,__mutex_timeout_cb,BAD_RTOS_STATUS_DELETED);
+    
+    *mut = (bad_mutex_t){0};
     
     return BAD_RTOS_STATUS_OK;
 }
@@ -3251,14 +3254,13 @@ BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem){
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
-    sem->init_flag = 0;
-    sem->counter = 0;
-    
     if(!sem->blockedq.next){
         return BAD_RTOS_STATUS_OK;
     }
     
     __synchro_wake_all(&sem->blockedq,__sem_timeout_cb,BAD_RTOS_STATUS_DELETED);
+    
+    *sem = (bad_sem_t){0};
     
     return BAD_RTOS_STATUS_OK;
 }
@@ -3409,8 +3411,7 @@ bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, uint32
     if(event_barrier->count && event_barrier->count != 32){
         return BAD_RTOS_STATUS_IN_USE;
     }
-    event_barrier->flags = 0;
-    event_barrier->blockedq = (bad_link_node_t){0};
+    *event_barrier = (bad_event_barrier_t){0};
     BAD_OPT_BARRIER;
     event_barrier->count = count;
     return BAD_RTOS_STATUS_OK;
@@ -3520,9 +3521,11 @@ BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_delete(bad_event_barrier_t *ev
     if(!event_barrier->count){
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    event_barrier->count = 0;
-    event_barrier->flags = 0;
+    
     __synchro_wake_all(&event_barrier->blockedq,__event_barrier_timeout_cb,BAD_RTOS_STATUS_DELETED);
+    
+    *event_barrier = (bad_event_barrier_t){0};
+    
     return BAD_RTOS_STATUS_OK;
 }
 

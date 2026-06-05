@@ -31,11 +31,10 @@ SECTIONS
 	{
 		__kernel_data = .;
 		*(.kernel_data)
-		. = ALIGN(4096);
 		__ekernel_data = .;
 	} > RAM AT > ROM
 
-	.static_stacks : ALIGN(8)
+	.static_stacks : ALIGN(4096)
 	{
 		__static_stacks = .;
         *(.static_stacks)
@@ -74,7 +73,6 @@ SECTIONS
     {   
         __ramfunc = .;
         *(.ramfunc)
-        *(.text.memmove)
         . = ALIGN(4);
         __eramfunc = .;
         

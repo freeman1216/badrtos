@@ -27,11 +27,10 @@ SECTIONS {
 	{
 		__kernel_data = .;
 		*(.kernel_data)
-		. = ALIGN(32);
 		__ekernel_data = .;
 	} > RAM AT > ROM
 
-	.static_stacks : ALIGN(8)
+	.static_stacks : ALIGN(32)
 	{
 		__static_stacks = .;
         *(.static_stacks)
@@ -43,7 +42,6 @@ SECTIONS {
         __heap = .;
         *(.kheap)
     } > RAM
-
 
     __rdata = LOADADDR(.data); /* data placed in rom */
 
@@ -63,14 +61,12 @@ SECTIONS {
         __ebss = .;
     } > RAM 
     
-
     __rramfunc = LOADADDR(.ramfunc); /* data placed in rom */
 
     .ramfunc :ALIGN(4)
     {   
         __ramfunc = .;
         *(.ramfunc)
-        *(.text.memmove)
         . = ALIGN(4);
         __eramfunc = .;
         

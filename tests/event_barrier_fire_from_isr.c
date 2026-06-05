@@ -25,18 +25,22 @@ void isr_test(){
 
 TASK_STATIC_STACK(task1, TASK1_STACK_SIZE);
 
-START_TASK_MPU_REGIONS_DEFINITIONS(task2)
+#ifdef BAD_RTOS_USE_MPU
+START_TASK_MPU_REGIONS_DEFINITIONS(task1)
 #if defined(BAD_PLATFORM_H562) || defined(BAD_PLATFORM_H562T)
-DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
+DEFINE_STATIC_STACK_REGION(task1_stack,TASK2_STACK_SIZE)
 #endif
-END_TASK_MPU_REGIONS(task2)
+END_TASK_MPU_REGIONS(task1)
+#endif
 
-void bad_user_setup(){
+void bad_user_init(){
     bad_task_descr_t task1_descr = {
         .stack = task1_stack,
         .stack_size = TASK1_STACK_SIZE,
         .entry = task1,
-        //.regions = task1_regions,
+#ifdef BAD_RTOS_USE_MPU
+        .regions = task1_regions,
+#endif
         .ticks_to_change = 500,
         .base_priority = TASK1_PRIORITY
     };

@@ -89,7 +89,7 @@ arm-none-eabi-gcc $opts -I$code/inc/ $src -o build/out.elf
 cd $code > /dev/null
 
 if [ "$3" = "debug" ]; then 
-	gf2 build/out.elf \
+	gf-svd build/out.elf \
 		-ex "target extended-remote /dev/ttyBmpGdb" \
 		-ex "monitor auto_scan"\
 		-ex "attach 1"\

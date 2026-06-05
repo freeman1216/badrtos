@@ -23,13 +23,15 @@ void task2(){
 #define TASK1_STACK_SIZE 1024
 TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
 
+#ifdef BAD_RTOS_USE_MPU
 START_TASK_MPU_REGIONS_DEFINITIONS(task2)
 #if defined(BAD_PLATFORM_H562) || defined(BAD_PLATFORM_H562)
 DEFINE_STATIC_STACK_REGION(task2_stack,TASK2_STACK_SIZE)
 #endif
 END_TASK_MPU_REGIONS(task2)
+#endif
 
-void bad_user_setup(){
+void bad_user_init(){
     bad_task_descr_t task1_descr = {
         .stack = 0,
         .stack_size = TASK1_STACK_SIZE,
@@ -41,7 +43,9 @@ void bad_user_setup(){
     bad_task_descr_t task2_descr = {
         .stack =task2_stack,
         .stack_size = TASK2_STACK_SIZE,
+#ifdef BAD_RTOS_USE_MPU
         .regions = task2_regions,
+#endif
         .entry = task2,
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY

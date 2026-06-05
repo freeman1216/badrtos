@@ -32,7 +32,7 @@ load_paths ={
 };
 
 commands = {
-    .f2 = { .linux = "bash build.sh h562 time_frame debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f2 = { .linux = "bash build.sh h562 msgq_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
     .f3 = { .linux = "bash build.sh f411 msgq_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
 };
 

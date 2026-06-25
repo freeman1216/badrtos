@@ -1162,7 +1162,8 @@ typedef enum{
 (x) == 2048 ? (10<<1):\
 (x) == 4096 ? (11<<1):\
 (x) == 8192 ? (12<<1):\
-16384\
+(x) == 16384 ? (13<<1):\
+(14 << 1)\
 )
 
 #define BAD_MPU_RBAR_VALID          (1u << 4)
@@ -1174,18 +1175,18 @@ typedef enum{
 
 #define START_TASK_MPU_REGIONS_DEFINITIONS(name)\
 enum {name##_COUNTER_BASE = __COUNTER__ }; \
-static const mpu_region_t __attribute__((section(".kernel_data"))) name##_regions[3]={
+static const mpu_region_t __attribute__((section(".kernel_data"))) name##_regions[3] = {
 
 // We embed the Region Index (1, 2, or 3) directly into the address word
 #define DEFINE_GENERIC_REGION(name,address, size, tex_scb, ap)\
-{\
-.addr = (uint32_t)(address) | BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(__COUNTER__ - name##_COUNTER_BASE), \
+[3 - ((__COUNTER__ - name##_COUNTER_BASE + 1) / 2)] = {\
+.addr = (uint32_t)(address) | BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(((__COUNTER__ - name##_COUNTER_BASE + 1) / 2)), \
 .rasr = (uint32_t)(ap) | (tex_scb) | BAD_MPU_FIND_SIZE(BAD_MPU_NEXT_POW2(size)) | 0x1 \
 },
 
 #define DEFINE_PERIPH_ACCESS_REGION(name,address, size) \
-{\
-.addr = (uint32_t)(address) | BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(__COUNTER__ - name##_COUNTER_BASE), \
+[3 - ((__COUNTER__ - name##_COUNTER_BASE + 1) / 2)] = {\
+.addr = (uint32_t)(address) | BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(((__COUNTER__ - name##_COUNTER_BASE) / 2)), \
 .rasr = BAD_MPU_RASR_XN | BAD_MPU_AP_FULL_ACCESS | BAD_MPU_TEXSCB_SHARED_DEVICE | BAD_MPU_FIND_SIZE(BAD_MPU_NEXT_POW2(size)) | 0x1 \
 },
 
@@ -3450,6 +3451,8 @@ static void __attribute__((naked,used)) __try_context_switch(){
                      "ldr r1,[r2,#4]           \n"
                      "orr r1,#0x14             \n"
                      "str r1,[r12,#4]          \n"
+                     "mov r1,#1                \n"
+                     "str r1,[r12]             \n"
                      "ldr r2,[r2,#48]          \n"
                      "add r1,r12,#4            \n"
                      "ldmia r2!,{r5-r10}       \n"
@@ -3484,6 +3487,8 @@ void __attribute__((naked)) __init_second_stage(){
                      "ldr r2,[r1,#4]             \n"
                      "orr r2,#0x14               \n"
                      "str r2,[r12,#4]            \n"
+                     "mov r2,#1                  \n"
+                     "str r2,[r12]               \n"
                      "ldr r1,[r1,#48]            \n"
                      "add r2,r12,#4              \n"
                      "ldmia r1!,{r5-r10}         \n"

@@ -1405,7 +1405,7 @@ static uint32_t __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_S
 
 TASK_STATIC_STACK(idle, IDLE_TASK_STACK_SIZE)
 // Prototypes for asm helpers, for implementation look right above svc_c function, or grep for "ASM stuff"
-extern void idle_task();
+extern void idle_task(void *);
 extern void __first_task_start();
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
@@ -2134,7 +2134,7 @@ static void __attribute__((used)) __handle_systick_event(bad_systick_status_t st
     }
 }
 
-BAD_RTOS_STATIC uint32_t * __init_stack(void (*task)(), uint32_t *stacktop,void *args){
+BAD_RTOS_STATIC uint32_t * __init_stack(taskptr task, uint32_t *stacktop,void *args){
     *--stacktop = 0x01000000UL;     // xPSR (Thumb bit set)
     *--stacktop = (uint32_t)task|0x1;   // PC
     *--stacktop = 0x0;     

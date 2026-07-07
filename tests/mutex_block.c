@@ -6,7 +6,8 @@ bad_task_handle_t task1h;
 bad_task_handle_t task2h;
 
 bad_mutex_t mut;
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         mutex_take(&mut,0);
         task_yield();
@@ -15,7 +16,8 @@ void task1(){
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         mutex_take(&mut,0);
         task_yield();

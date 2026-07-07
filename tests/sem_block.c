@@ -5,7 +5,8 @@
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
 bad_sem_t sem;
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         sem_take(&sem,0);
         task_yield();
@@ -14,7 +15,8 @@ void task1(){
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         sem_take(&sem,0);
         task_yield();
@@ -22,7 +24,8 @@ void task2(){
         task_yield();
     }
 }
-void task3(){
+void task3(void *unused){
+    (void)unused;
     while (1) {
         sem_take(&sem,0);
         task_yield();

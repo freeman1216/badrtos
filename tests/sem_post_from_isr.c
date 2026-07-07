@@ -6,7 +6,8 @@
 bad_task_handle_t task1h;
 
 bad_sem_t sem = {.init_flag = 1};
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         bad_rtos_status_t res = sem_take(&sem,0);
     }

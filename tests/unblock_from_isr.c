@@ -12,14 +12,16 @@ void cb(bad_task_handle_t unused0, void* unused1){
     UNUSED(unused1);
     callback_hit++;
 } 
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         task_block();
         unblocked++;
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         
     }

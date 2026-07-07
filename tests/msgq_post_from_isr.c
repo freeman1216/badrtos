@@ -8,7 +8,8 @@ bad_task_handle_t task1h;
 MSGQ_STATIC_INIT(task1q, 16);
 
 
-void task1(){
+void task1(void * unused){
+    (void)unused;
     volatile uint32_t sig0 = 0;
     volatile uint32_t sig1 = 0;
     volatile uint32_t sig2 = 0;

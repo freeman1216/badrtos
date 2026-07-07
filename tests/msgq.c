@@ -12,7 +12,8 @@ volatile uint32_t sig1;
 volatile uint32_t sig2;
 volatile uint32_t sig3;
 
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         bad_msg_block_t msg = {0};
         msgq_pull_msg(&task1q, &msg,0);
@@ -38,7 +39,8 @@ void task1(){
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     uint32_t sig = 0;
     while (1) {
         msgq_post_msg(&task1q, sig, 0,0);

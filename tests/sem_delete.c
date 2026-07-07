@@ -5,7 +5,8 @@
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
 bad_sem_t sem ;
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         task_yield();
         while (1) {
@@ -18,7 +19,8 @@ void task1(){
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         bad_rtos_status_t status;
         status = sem_take(&sem,0);
@@ -27,7 +29,8 @@ void task2(){
         }
     }
 }
-void task3(){
+void task3(void *unused){
+    (void)unused;
     while (1) {
         bad_rtos_status_t status;
         status = sem_take(&sem,0);

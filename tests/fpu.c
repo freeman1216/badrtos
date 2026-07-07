@@ -6,7 +6,8 @@
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
 
-void task1(){
+void task1(void *unused){
+    (void)unused;
     volatile float_t f = 1;
     while (1) {
         f *= 1.75;
@@ -14,7 +15,8 @@ void task1(){
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     volatile float_t f = 1;
     while (1) {
         f *= 2.25;

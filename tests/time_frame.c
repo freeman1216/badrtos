@@ -5,13 +5,15 @@
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
 
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         
     }

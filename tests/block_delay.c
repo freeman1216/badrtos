@@ -11,14 +11,16 @@ void cb(bad_task_handle_t unused0, void* unused1){
     UNUSED(unused1);
     callback_hit++;
 } 
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         task_delay(200, cb, 0);
         task_block();
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         bad_rtos_status_t status;
         status = task_unblock(task1h);
@@ -60,7 +62,7 @@ void bad_user_init(){
         .stack = task2_stack,
         .stack_size = TASK2_STACK_SIZE,
         .entry = task2,
-        .regions = task1_regions,
+        .regions = task2_regions,
         .ticks_to_change = 500,
         .base_priority = TASK2_PRIORITY
     };

@@ -5,7 +5,8 @@
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
 bad_mutex_t mut;
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         mutex_take(&mut,0);
         task_yield();
@@ -14,7 +15,8 @@ void task1(){
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         bad_rtos_status_t status;
         status = mutex_take(&mut,0);
@@ -65,8 +67,8 @@ void bad_user_init(){
 
 int __attribute__((noinline)) main(){
     __DISABLE_INTERUPTS;
-    __main_clock_init();
-    __periph_init();
+    __main_clock_setup();
+    __periph_setup();
     __ENABLE_INTERUPTS;
     bad_rtos_start();
     //task_yield();

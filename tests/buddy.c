@@ -12,16 +12,18 @@ void cb(bad_task_handle_t unused0, void* unused1){
     UNUSED(unused1);
     callback_hit++;
 } 
-void task1(){
+void task1(void *unused){
+    (void)unused;
     while (1) {
         task_delay(200, cb, 0);
-        uint32_t *arr = user_alloc(16);
+        uint32_t *arr = kernel_alloc(16);
         task_block();
-        user_free(arr,16);
+        kernel_free(arr,16);
     }
 }
 
-void task2(){
+void task2(void *unused){
+    (void)unused;
     while (1) {
         bad_rtos_status_t status;
         status = task_unblock(task1h);
@@ -34,11 +36,6 @@ void task2(){
     }
 }
 
-void task3(){
-    while (1) {
-        
-    }
-}
 
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 1
@@ -73,15 +70,6 @@ void bad_user_init(){
         .base_priority = TASK2_PRIORITY
     };
     task2h = task_make(&task2_descr);
-    bad_task_descr_t task3_descr = {
-        .stack = 0,
-        .stack_size = TASK1_STACK_SIZE,
-        .entry = task3,
-        //.regions = task1_regions,
-        .ticks_to_change = 500,
-        .base_priority = IDLE_TASK_PRIO + 1
-    };
-    task3h = task_make(&task3_descr);
 }
 
 

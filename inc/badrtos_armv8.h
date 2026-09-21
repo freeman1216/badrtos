@@ -2906,6 +2906,8 @@ void bad_rtos_start()
     
     if(bad_user_init() == BAD_RTOS_STATUS_OK)
         __first_task_start();
+    else
+        __restore_basepri(0);
 }
 
 //Synchro helpers
@@ -3788,11 +3790,13 @@ static void __attribute__((used)) __svc_c(u8 svc, u32* stack)
             stack[0] = __msgq_release((bad_msgq_t *)stack[0]);
         }break;
 #ifdef BAD_RTOS_USE_KHEAP
-        case 0x14:{
+        case 0x14:
+        {
             stack[0] = __msgq_acquire_allocate((bad_msgq_t *)stack[0],stack[1]);
         }break;
         
-        case 0x15:{
+        case 0x15:
+        {
             stack[0] = __msgq_release_deallocate((bad_msgq_t *)stack[0]);
         }break;
 #endif

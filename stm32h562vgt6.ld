@@ -3,7 +3,7 @@ MEMORY {
   RAM(rwx) : ORIGIN = 0x20000000, LENGTH = 640k
 }
 
-__estack     = ORIGIN(RAM) + LENGTH(RAM);       /* stack points to end of SRAM */
+__estack     = ORIGIN(RAM) + LENGTH(RAM);
 
 SECTIONS {
     .text : ALIGN(4)
@@ -18,7 +18,6 @@ SECTIONS {
         __kernel_bss = .;
         *(.kernel_bss)
         __ekernel_bss = .;
-   
     } > RAM
 
     __rkernel_data = LOADADDR(.kernel_data);

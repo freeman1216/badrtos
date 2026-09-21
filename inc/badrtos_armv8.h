@@ -2,8 +2,6 @@
 * @file badrtos_armv8.h
 * @brief Header only rtos implementation
 *
-*
-*
 * Usage:
 *  - Include this file and define BAD_RTOS_IMPLEMENTATION in **one**
 *    C file
@@ -60,7 +58,7 @@
 // PUBLIC API**********************************************
 
 **
-* \b TASK_HANDLE_IS_VALID
+* \b BAD_TASK_HANDLE_IS_VALID
 *  Public macro to check the validity of the task handle
 *  
 *  @param[in] bad_task_handle_t task handle
@@ -68,18 +66,19 @@
 *  @retval 1 valid
 *  @retval 0 invalid
 *
-#define TASK_HANDLE_IS_VALID(handle)
+#define BAD_TASK_HANDLE_IS_VALID(handle)
 
 **
-* \b BAD_TASK_HANDLE_INVALID_GET_ERROR
-*  Public macro to get error from invalid taskhandle
+* \b BAD_TASK_HANDLE_GET_ERROR(handle)
+*  Public macro to get error from taskhandle
 *  
-*  @param[in] bad_task_handle_t invalid task handle
-*
+*  @param[in] bad_task_handle_t task handle
+*  
+*  @retval BAD_RTOS_STATUS_OK task handle valid
 *  @retval BAD_RTOS_STATUS_BAD_PARAMETERS on bad configurations
 *  @retval BAD_RTOS_STATUS_ALLOC_FAIL on allocation falure
-*
-*
+* 
+#define BAD_TASK_HANDLE_INVALID_GET_ERROR(handle)
 
 #define TASK_HANDLE_INVALID_GET_ERROR(handle) ((handle) >> 16)
 **
@@ -123,7 +122,7 @@
 *
 * This function cannot be called from interrupt context. Will generate a fault if done so
 *
-* @param[in] uint32_t delay in ticks 
+* @param[in] u32 delay in ticks 
 * @param[in] cbptr cb callback to run 
 * @param[in] void* args arguments for the callback
 *
@@ -132,7 +131,7 @@
 * @retval BAD_RTOS_STATUS_WRONG_CONTEXT the function was called by an isr
 * @retval BAD_RTOS_STATUS_SCHED_LOCKED sched locked
 *
-* extern bad_rtos_status_t task_delay(uint32_t delay, cbptr cb, void *args );
+* extern bad_rtos_status_t task_delay(u32 delay, cbptr cb, void *args );
 
 **
 * \b task_block
@@ -275,9 +274,9 @@
 * Disables scheduler operation, stops context switching
 * Most of the api is unavailible in this state 
 *
-* @retval uint32_t previous lock state
+* @retval u32 previous lock state
 *
-* extern uint32_t sched_lock();
+* extern u32 sched_lock();
 
 **
 * \b sched_unlock 
@@ -285,9 +284,9 @@
 * Public svc call (svc 0xF1) that calls internal function __sched_unlock
 * Enables scheduler operation, restarts context switching
 *
-* @param[in] uint32_t previous lock state
+* @param[in] u32 previous lock state
 *
-* extern void sched_unlock(uint32_t key);
+* extern void sched_unlock(u32 key);
 
 **
 * \b pool_init
@@ -303,7 +302,7 @@
 * @retval void * to allocated memory
 * @retval Null ptr allocation failed 
 *
-* extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, uint32_t block_size, uint32_t size_in_bytes);
+* extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes);
 
 **
 * \b pool_init
@@ -375,12 +374,12 @@
 * Uses buddy allocator under the hood
 *
 * This function cannot be called from interrupt context. 
-* @param[in] uint32_t size in bytes 
+* @param[in] u32 size in bytes 
 * 
 * @retval void * to allocated memory
 * @retval Null ptr allocation failed 
 *
-* extern void* kernel_alloc(uint32_t size);
+* extern void* kernel_alloc(u32 size);
 
 **
 * \b kernel_free
@@ -392,10 +391,10 @@
 *
 * This function cannot be called from interrupt context.
 * @param[in] void * to allocated memory 
-* @param[in] uint32_t size in bytes 
+* @param[in] u32 size in bytes 
 * 
 *
-* extern void kernel_free(void *block,uint32_t size);
+* extern void kernel_free(void *block,u32 size);
 
 // Priority inheriting mutex api
 **
@@ -438,7 +437,7 @@
 * This function cannot be called from interrupt context.Will generate a fault if done so
 *
 * @param[in] bad_mutex_t* Ptr to mutex object to try take  
-* @param[in] uint32_t delay ticks 0 = block, -1 = dont block, N = block for N ticks
+* @param[in] u32 delay ticks 0 = block, -1 = dont block, N = block for N ticks
 *
 * @retval BAD_RTOS_STATUS_OK Mutex successfully taken
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex ptr is null
@@ -446,7 +445,7 @@
 * @retval BAD_RTOS_STATUS_WRONG_CONTEXT function was called from an isr
 * @retval BAD_RTOS_STATUS_SCHED_LOCKED sched locked
 *
-* extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,uint32_t delay);
+* extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,u32 delay);
 
 **
 * \b mutex_put
@@ -505,12 +504,12 @@
 *
 * This function can be called from interrupt context. But is not reentrant if the object parameter is the same
 * @param[in] bad_sem_t* Ptr to semaphore object to initialise
-* @param[in] uint16_t Value to initialise semaphore counter with
+* @param[in] u16 Value to initialise semaphore counter with
 *
 * @retval BAD_RTOS_STATUS_OK semaphore successfully initialised
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS semaphore ptr is null 
 *
-* extern bad_rtos_status_t sem_init(bad_sem_t *sem,uint32_t reset_value);
+* extern bad_rtos_status_t sem_init(bad_sem_t *sem,u32 reset_value);
 
 **
 * \b sem_take
@@ -533,7 +532,7 @@
 * This function cannot be called from interrupt context. Will generate a fault if done so
 *
 * @param[in] bad_sem_t* Ptr to semaphore object to try take  
-* @param[in] uint32_t delay ticks 0 = block, -1 = dont block, N = block for N ticks
+* @param[in] u32 delay ticks 0 = block, -1 = dont block, N = block for N ticks
 *
 * @retval BAD_RTOS_STATUS_OK Semaphore successfully taken
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS mutex ptr is null
@@ -541,7 +540,7 @@
 * @retval BAD_RTOS_STATUS_WOULD_BLOCK take failed without blocking the caller
 * @retval BAD_RTOS_STATUS_SCHED_LOCKED sched locked
 *
-* extern bad_rtos_status_t sem_take(bad_sem_t *sem,uint32_t delay);
+* extern bad_rtos_status_t sem_take(bad_sem_t *sem,u32 delay);
 
 **
 * \b sem_put
@@ -622,14 +621,14 @@
 * The capacity must be a power of 2. A task can only own one message queue at a time.
 *
 * @param[in] bad_msgq_t* q Ptr to message queue object to initialize and bind
-* @param[in] uint32_t capacity Number of messages the queue can hold (MUST be a power of 2)
+* @param[in] u32 capacity Number of messages the queue can hold (MUST be a power of 2)
 *
 * @retval BAD_RTOS_STATUS_OK Queue successfully allocated and bound to current task
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS q is NULL or capacity is not a power of 2
 * @retval BAD_RTOS_STATUS_NOT_OWNER Queue is already owned by another task
 * @retval BAD_RTOS_STATUS_ALREADY_BOUND The current task already owns a message queue
 *
-* extern bad_rtos_status_t msgq_acquire_allocate(bad_msgq_t *q, uint32_t capacity);
+* extern bad_rtos_status_t msgq_acquire_allocate(bad_msgq_t *q, u32 capacity);
 
 **
 * \b msgq_release_deallocate
@@ -699,7 +698,7 @@
 *
 * @param[in] bad_msgq_t* q Ptr to message queue to pull from
 * @param[out] bad_msg_block_t* writeback Ptr to memory where the pulled message will be copied
-* @param[in] uint32_t delay ticks 0 = block, -1 = dont block, N = block for N ticks
+* @param[in] u32 delay ticks 0 = block, -1 = dont block, N = block for N ticks
 *
 * @retval BAD_RTOS_STATUS_OK Message successfully pulled
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS q or writeback ptr is NULL
@@ -708,7 +707,7 @@
 * @retval BAD_RTOS_STATUS_WOULD_BLOCK delay is -1 and queue is empty
 * @retval BAD_RTOS_STATUS_TIMEOUT blocked for N ticks without receiving a message
 *
-* extern bad_rtos_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback, uint32_t delay);
+* extern bad_rtos_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback, u32 delay);
 
 **
 * \b msgq_post_msg
@@ -725,9 +724,9 @@
 * and receives the message immediately.
 *
 * @param[in] bad_msgq_t* q Ptr to message queue to post to
-* @param[in] uint32_t signal The 32-bit signalID of the message
+* @param[in] u32 signal The 32-bit signalID of the message
 * @param[in] void* args Ptr to message arguments or payload
-* @param[in] uint32_t delay ticks 0 = block, -1 = dont block, N = block for N ticks
+* @param[in] u32 delay ticks 0 = block, -1 = dont block, N = block for N ticks
 *
 * @retval BAD_RTOS_STATUS_OK Message successfully posted
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS q is NULL
@@ -735,7 +734,7 @@
 * @retval BAD_RTOS_STATUS_WOULD_BLOCK delay is -1 and queue is full
 * @retval BAD_RTOS_STATUS_TIMEOUT blocked for N ticks without space freeing up
 *
-* extern bad_rtos_status_t msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args, uint32_t delay);
+* extern bad_rtos_status_t msgq_post_msg(bad_msgq_t *q, u32 signal, void *args, u32 delay);
 
 **
 * \b msgq_post_msg_from_isr
@@ -750,7 +749,7 @@
 * This function must be called from an interrupt context.
 *
 * @param[in] bad_msgq_t* q Ptr to message queue to post to
-* @param[in] uint32_t signal The 32-bit signal/ID of the message
+* @param[in] u32 signal The 32-bit signal/ID of the message
 * @param[in] void* args Ptr to message arguments or payload
 *
 * @retval BAD_RTOS_STATUS_OK Message successfully posted
@@ -760,7 +759,7 @@
 * @retval BAD_RTOS_STATUS_WOULD_BLOCK Queue is full, cannot post
 * @retval BAD_RTOS_STATUS_ALLOC_FAIL failed to allocate kernel message
 *
-* extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, uint32_t signal, void *args);
+* extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args);
  
 //Event barrier 
 **
@@ -784,13 +783,13 @@
 * The maximum number of flags is 31.
 *
 * @param[in] bad_event_barrier_t* Ptr to event barrier object to prime
-* @param[in] uint32_t count Number of distinct events required to fire the barrier (1 to 31)
+* @param[in] u32 count Number of distinct events required to fire the barrier (1 to 31)
 *
 * @retval BAD_RTOS_STATUS_OK Event barrier successfully primed
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS event_barrier ptr is null, count is 0, or count >= 32
 * @retval BAD_RTOS_STATUS_IN_USE barrier is currently active/primed and hasn't fired yet
 *
-* extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, uint32_t count);
+* extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count);
 
 **
 * \b event_barrier_wait
@@ -808,15 +807,15 @@
 * When the event barrier fires all tasks are woken with flags at the time of firing with bit 31 set (1 << 31)
 * 
 * @param[in] bad_event_barrier_t* Ptr to event barrier object to wait on
-* @param[in] uint32_t delay ticks 0 = block, N = block for N ticks
+* @param[in] u32 delay ticks 0 = block, N = block for N ticks
 *
-* @retval uint32_t flags | (1 << 31)
+* @retval u32 flags | (1 << 31)
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS event_barrier ptr is NULL
 * @retval BAD_RTOS_STATUS_NOT_INITIALISED barrier count is 0 (unprimed)
 * @retval BAD_RTOS_STATUS_FIRED the barrier has already fired (count == 32)
 * @retval BAD_RTOS_STATUS_WOULD_BLOCK delay = -1 and barrier has not fired yet 
 *
-* extern uint32_t event_barrier_wait(bad_event_barrier_t *event_barrier, uint32_t delay);
+* extern u32 event_barrier_wait(bad_event_barrier_t *event_barrier, u32 delay);
 
 **
 * \b event_barrier_fire_from_isr
@@ -831,7 +830,7 @@
 * This function must be called from an interrupt context.
 *
 * @param[in] bad_event_barrier_t* Ptr to event barrier object to fire
-* @param[in] uint32_t flag Bitmask representing the specific event(s) to set
+* @param[in] u32 flag Bitmask representing the specific event(s) to set
 *
 * @retval BAD_RTOS_STATUS_OK Flag successfully set (barrier may or may not have fired)
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS event_barrier is NULL, flag is 0, or flag contains invalid bits
@@ -840,7 +839,7 @@
 * @retval BAD_RTOS_STATUS_FIRED the barrier has already fired
 * @retval BAD_RTOS_STATUS_ALLOC_FAIL failed to allocate kernel message
 *
-* extern bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier, uint32_t flag);
+* extern bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier, u32 flag);
 
 **
 * \b __event_barrier_fire
@@ -853,14 +852,14 @@
 * When fired, it immediately unblocks all tasks waiting on this barrier and writes the flags state to the stacks of blocked tasks
 *
 * @param[in] bad_event_barrier_t* Ptr to event barrier object to fire
-* @param[in] uint32_t flag Bitmask representing the specific event(s) to set
+* @param[in] u32 flag Bitmask representing the specific event(s) to set
 *
 * @retval BAD_RTOS_STATUS_OK Flag successfully set (barrier may or may not have fired)
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS event_barrier is NULL, flag is 0, or flag contains invalid bits
 * @retval BAD_RTOS_STATUS_NOT_INITIALISED barrier count is 0 (unprimed)
 * @retval BAD_RTOS_STATUS_FIRED the barrier has already fired
 *
-* extern bad_rtos_status_t event_barrier_fire(bad_event_barrier_t *event_barrier, uint32_t flag);
+* extern bad_rtos_status_t event_barrier_fire(bad_event_barrier_t *event_barrier, u32 flag);
 
 **
 * \b event_barrier_delete
@@ -927,10 +926,12 @@
 */
 
 #pragma once
-#ifndef BAD_RTOS_CORE
-#define BAD_RTOS_CORE
+#ifndef BAD_RTOS_H
+#define BAD_RTOS_H
 
 #include <stdint.h>
+
+#define KB (1024)
 
 //CONFIG
 //uncoment those to enable desired functionality
@@ -945,7 +946,11 @@
 #define BAD_RTOS_USE_FPU        //fpu
 #define BAD_RTOS_FPU_DEFAULT_SETTINGS //use default settings for the fpu (lazy + auto stacking enabled),if custom settings used - comment this and enable lazy stacking
 
-#define BAD_RTOS_FLASH_SIZE         (0x80000)
+#define BAD_RTOS_FLASH_RO_ADDR (0x08000000) //start of RO region
+#define BAD_RTOS_FLASH_RO_SIZE (512 * KB)//used to setup mpu RO region
+#define BAD_RTOS_RAM_ADDR (0x20000000) //start of RAM 
+#define BAD_RTOS_RAM_SIZE  (128 * KB)//used to setup mpu RAM region
+
 #define BAD_RTOS_GLOBAL_POOL_SIZE   (128)
 #define BAD_RTOS_MAX_TASKS          (32)   //maximum number of running tasks, number of user priorities = BAD_RTOS_MAX_TASKS-2, with idle task running at BAD_RTOS_MAX_TASKS-1
 #define BAD_RTOS_PRIO_BITS          (4)
@@ -962,10 +967,18 @@
 #error "Number of tasks must be <=32"
 #endif
 
+typedef uint32_t u32;
+typedef uint16_t u16;
+typedef uint8_t u8;
+typedef int32_t s32;
+typedef int16_t s16;
+typedef int8_t s8;
+
 // error codes 
-typedef enum {
-    BAD_RTOS_STATUS_ALLOC_FAIL = 0, // to return as null ptr
+typedef enum 
+{
     BAD_RTOS_STATUS_OK,
+    BAD_RTOS_STATUS_ALLOC_FAIL,
     BAD_RTOS_STATUS_BAD_PARAMETERS,
     BAD_RTOS_STATUS_NOT_BLOCKED,
     BAD_RTOS_STATUS_NOT_DELAYED,
@@ -984,12 +997,10 @@ typedef enum {
     BAD_RTOS_STATUS_SCHED_LOCKED,
     BAD_RTOS_STATUS_FIRED,
     BAD_RTOS_STATUS_IN_USE
-}bad_rtos_status_t;
-// helper enum to discriminate the position of the tcb in a queue
-// the logic behind it is
-// member enum = head enum + 1 
-// this allows to easily check if a tcb is a member of the respective queue or not
-typedef enum {
+} bad_rtos_status_t;
+
+typedef enum 
+{
     BAD_RTOS_MISC_RUNNING,
     BAD_RTOS_MISC_READYQ_MEMBER,
     BAD_RTOS_MISC_BLOCKEDQ_MEMBER,
@@ -998,39 +1009,95 @@ typedef enum {
     BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER,
     BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER
 } bad_rtos_misc_t;
-// helper enum for software timer queue
-// folows the same logic as the enum above
-typedef enum{
+
+typedef enum
+{
     BAD_RTOS_MISC_NOT_DELAYED,
     BAD_RTOS_MISC_DELAYQ_MEMBER
-}bad_rtos_delayq_misc_t;
+} bad_rtos_delayq_misc_t;
 
 #ifdef BAD_RTOS_USE_MPU
-//mpu region struct, stores the precomputed rasr and the adress of the region
-typedef struct {
-    uintptr_t rbar;
-    uintptr_t rlar;
-}mpu_region_t;
+typedef enum
+{
+    BAD_MPU_PRIV_FAULT_UNPRIV_FAULT = 0,
+    BAD_MPU_PRIV_RW_UNPRIV_FAULT    = 1,
+    BAD_MPU_PRIV_RW_UNPRIV_RW       = 1 << 1,
+    BAD_MPU_PRIV_RO_UNPRIV_FAULT    = 1 << 2,
+    BAD_MPU_PRIV_RO_UNPRIV_RO       = 1 << 3,
+#define BAD_MPU_PRIV_MASK ((BAD_MPU_PRIV_RO_UNPRIV_RO << 1) - 1)
+    BAD_MPU_NON_SHAREABLE           = 0,
+    BAD_MPU_OUTER_SHAREABLE         = 1 << 4,
+    BAD_MPU_INNER_SHAREABLE         = 1 << 5,
+#define BAD_MPU_SH_MASK (BAD_MPU_OUTER_SHAREABLE | BAD_MPU_INNER_SHAREABLE)
+    BAD_MPU_EXECUTE_NEVER           = 1 << 7
+} bad_mpu_settings_t;
+
+typedef enum
+{
+    BAD_MPU_REGION_NONE,
+    BAD_MPU_REGION_DEVICE_GRE,
+    BAD_MPU_REGION_DEVICE_NGRE,
+#define BAD_MPU_DEVICE_REGIONS_END (BAD_MPU_REGION_DEVICE_NGRE)
+    BAD_MPU_REGION_NORMAL_NONCACHEABLE,
+#define BAD_MPU_REGION_DMA_BUFF (BAD_MPU_REGION_NORMAL_NONCACHEABLE)
+    BAD_MPU_REGION_NORMAL_NT_CACHEABLE_WB,
+    BAD_MPU_REGION_NORMAL_NT_CACHEABLE_WT,
+    BAD_MPU_REGION_NORMAL_TR_CACHEABLE_WB,
+    BAD_MPU_REGION_NORMAL_TR_CACHEABLE_WT,
+    BAD_MPU_REGION_MAX,
+} bad_mpu_region_type_t;
+
+typedef struct 
+{
+    uint8_t *addr;
+    u32 size;
+    bad_mpu_region_type_t type;
+    u32 settings;
+} bad_mpu_user_region_t;
+
+//mpu region struct, internal
+typedef struct 
+{
+    u32 __reg0;
+    u32 __reg1;
+} bad_mpu_region_t;
 #endif
 
-typedef uint32_t bad_task_handle_t;
+#define DEFINE_DMA_BUFF(name,size) \
+_Static_assert((size) % 32 == 0,"DMA buffers should be multiples of 32");\
+static u8 __attribute__((section(".dma_buffs"))) name[(size)];
+
+typedef union
+{
+    struct
+    {
+        u16 gen;
+        u16 idx;
+    };
+    u32 val;
+    
+} bad_task_handle_t;
 
 typedef void (*taskptr)(void * par) ;
 typedef void (*cbptr)(bad_task_handle_t handle,void * par);
 
-typedef struct bad_link_node{
-    struct bad_link_node *prev;
-    struct bad_link_node *next;
-} bad_link_node_t;
+typedef struct bad_link_node bad_link_node_t;
+struct bad_link_node
+{
+    bad_link_node_t *prev;
+    bad_link_node_t *next;
+};
 
 // main fat struct of the program
-typedef struct bad_tcb{
+typedef struct bad_tcb bad_tcb_t;
+struct bad_tcb
+{
     // stack pointer, doesnt really reflect the actual one when running, actual one is + 32
     // (due to registers stacked by hardware), used only to save it for a context switch     
-    uint32_t * volatile sp;
+    u32 *sp;
     //stack base
-    uint8_t *stack;
-    uint32_t stack_size;
+    u8 *stack;
+    u32 stack_size;
     taskptr entry;
     //callback for delays
     cbptr cbptr;
@@ -1038,182 +1105,125 @@ typedef struct bad_tcb{
     void* args;
     bad_link_node_t qnode;
     bad_link_node_t delaynode;
-    uint32_t ticks_to_change;   
-    volatile uint32_t counter;
+    u32 ticks_to_change;   
+    volatile u32 counter;
 #if defined (BAD_RTOS_USE_MPU)
-    const mpu_region_t *regions;
+    bad_mpu_region_t regions[4];
 #endif
     bad_rtos_misc_t misc;
     bad_rtos_delayq_misc_t delayq_misc;
-    uint16_t generation; //for handles
+    u16 generation; //for handles
 #ifdef BAD_RTOS_USE_KHEAP
-    uint8_t dyn_stack;
+    u8 dyn_stack;
 #endif
     //execution priority, follows nvic logic : lower number is higher priority
-    uint8_t base_priority;
-    uint8_t raised_priority;
+    u8 base_priority;
+    u8 raised_priority;
 #ifdef BAD_RTOS_USE_MUTEX
-    uint8_t mutex_count;
+    u8 mutex_count;
 #endif
 #ifdef BAD_RTOS_USE_MSGQ
-    uint8_t msgq_owner;
+    u8 msgq_owner;
 #endif
-}bad_tcb_t;
+};
 
-typedef struct {
-    uint8_t * volatile next;
-    uint8_t *mem;
-    volatile uint32_t curr;
-    uint32_t size_in_bytes;
-    uint32_t block_size;
+typedef struct 
+{
+    u8 * volatile next;
+    u8 *mem;
+    volatile u32 curr;
+    u32 size_in_bytes;
+    u32 block_size;
 }bad_pool_t;
 
 #ifdef BAD_RTOS_USE_MSGQ
-typedef struct bad_msg_block{
-    uint32_t signal;
+typedef struct
+{
+    u32 signal;
     void *args;
 } bad_msg_block_t;
 
-typedef struct {
+typedef struct 
+{
     bad_link_node_t blockedq;
-    bad_tcb_t* owner;
-    uint16_t capacity;
-    uint16_t pad;
-    volatile uint16_t head;
-    volatile uint16_t tail;
+    bad_tcb_t *owner;
+    u16 capacity_mask;
+    u16 pad;
+    volatile u16 head;
+    volatile u16 tail;
     bad_msg_block_t *msgs;
-    uint8_t dynamic;
+    u8 dynamic;
 } bad_msgq_t;
+
+_Static_assert(__builtin_offsetof(bad_msgq_t,head) % 4 == 0, "Message queue head member should have alignment of 4 for atomic update logic to work");
 #endif
 
 //task decription for task creation
-typedef struct{
-    uint32_t stack_size;
-    uint8_t* stack;
+typedef struct
+{
+    u32 stack_size;
+    u8 *stack;
     taskptr entry;
-    void* args;
-    uint32_t ticks_to_change;
+    void *args;
+    u32 ticks_to_change;
 #ifdef BAD_RTOS_USE_MPU
-    const mpu_region_t *regions;
+    const bad_mpu_user_region_t *regions; //null terminated array
 #endif
 #ifdef BAD_RTOS_USE_MSGQ
     bad_msgq_t *assigned_msgq;
 #endif
-    uint8_t base_priority;
-}bad_task_descr_t;
+    u8 base_priority;
+} bad_task_descr_t;
 
 #ifdef BAD_RTOS_USE_MUTEX
-typedef struct bad_mutex{
+typedef struct 
+{
     bad_link_node_t blockedq;
     bad_tcb_t *owner;
-    uint32_t rec_takes;
-} bad_mutex_t ;
+    u32 rec_takes;
+} bad_mutex_t;
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-typedef struct bad_sem{
+typedef struct 
+{
     bad_link_node_t blockedq;
-    volatile uint32_t counter;
-    volatile uint32_t init_flag;
+    volatile u32 counter;
+    volatile u32 init_flag;
 } bad_sem_t;
 #endif
 
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
-typedef struct{
+typedef struct
+{
     bad_link_node_t blockedq;
-    volatile uint32_t flags;
-    volatile uint32_t count;
-}bad_event_barrier_t;
+    volatile u32 flags;
+    volatile u32 count;
+} bad_event_barrier_t;
 #endif
-
-#ifdef BAD_RTOS_USE_MPU
-
-typedef enum{
-    BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_FAULT    = 0x0,
-    BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW       = 0x2,
-    BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT    = 0x4,
-    BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO       = 0x6
-}bad_mpu_ap_states_t;
-
-typedef enum{
-    BAD_MPU_RBAR_SH_NON_SHAREABLE   = 0x0,
-    BAD_MPU_RBAR_SH_OUTER_SHAREABLE = 0x8,
-    BAD_MPU_RBAR_SH_INNER_SHAREABLE = 0x10
-}bad_mpu_sh_states_t;
-
-#define BAD_RTOS_NORMAL_MAIR_IDX    (0)
-#define BAD_RTOS_DEVICE_MAIR_IDX    (1)
-#define BAD_RTOS_DMA_BUFF_MAIR_IDX  (2)
-
-#define BAD_MPU_RBAR_XN (0x1)
-#define BAD_MPU_RLAR_EN (0x1)
-
-#define BAD_MPU_RLAR_SET_MAIR_IDX(idx) ((idx) << 1)
-
-#define BAD_RTOS_STACK_RBAR     (BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW | BAD_MPU_RBAR_XN)
-#define BAD_RTOS_STACK_RLAR     (BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_MAIR_IDX) | BAD_MPU_RLAR_EN)
-
-#define BAD_RTOS_DMA_BUFF_RBAR     (BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW | BAD_MPU_RBAR_XN)
-#define BAD_RTOS_DMA_BUFF_RLAR     (BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_DMA_BUFF_MAIR_IDX)|\
-BAD_MPU_RBAR_SH_OUTER_SHAREABLE|BAD_MPU_RLAR_EN)
-
-#define START_TASK_MPU_REGIONS_DEFINITIONS(name)\
-static const __attribute__((section(".kernel_data"))) mpu_region_t name##_regions[4]={
-
-#define DEFINE_GENERIC_REGION(address, size, mair_idx, share, xn, ap)\
-{\
-.rbar = (uintptr_t)(address) | (xn)| (share)| (ap) ,\
-.rlar = ((uintptr_t)((address) + (size) ) | BAD_MPU_RLAR_SET_MAIR_IDX(idx) |  BAD_MPU_RLAR_EN\
-},
-#define DEFINE_PERIPH_ACCESS_REGION(address, size) \
-{\
-.rbar = (uintptr_t)(address) | BAD_MPU_RBAR_XN | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW ,\
-.rlar = ((uintptr_t)((address) + (size)) & ~(0x1F) | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_DEVICE_MAIR_IDX) |  BAD_MPU_RLAR_EN\
-},
-
-#define DEFINE_STATIC_STACK_REGION(address, size) \
-{\
-.rbar = (uintptr_t)(address + BAD_RTOS_STACK_RBAR) ,\
-.rlar = (uintptr_t)((address) + (size) - 32 + BAD_RTOS_STACK_RLAR)\
-},
-
-#define DEFINE_DMA_BUFF_REGION(address,size) \
-{\
-.rbar = (uintptr_t)(address + BAD_RTOS_DMA_BUFF_RBAR) ,\
-.rlar = (uintptr_t)((address) + (size) - 32 + BAD_RTOS_DMA_BUFF_RLAR)\
-},
-
-#define END_TASK_MPU_REGIONS(name) \
-};
-
-#define DEFINE_DMA_BUFF(name,size) \
-_Static_assert((size) % 32 == 0,"DMA buffers should be multiples of 32");\
-static uint8_t __attribute__((section(".dma_buffs"))) name[(size)];
-
-#endif 
 
 //Macro for static stack definition
 #ifdef BAD_RTOS_USE_MPU
 #define TASK_STATIC_STACK(task_name,size)\
 _Static_assert(size % 32 == 0,"Stack sizes must be multiples of 32");\
 _Static_assert(size >= 128,"Stacks must be at least 128 bytes to accomodate exception stacked registers and stack cannary");\
-static uint8_t task_name##_stack[size] __attribute__((section(".static_stacks")));
+static u8 task_name##_stack[size] __attribute__((section(".static_stacks")));
 #else 
 #define TASK_STATIC_STACK(task_name,size)\
 _Static_assert(size % 8 == 0,"Stack sizes must be multiples of 8");\
 _Static_assert(size >= 64,"Stacks must be at least 64 bytes to accomodate exception stacked registers");\
-static uint8_t task_name##_stack[size] __attribute__((section(".static_stacks")));
+static u8 task_name##_stack[size] __attribute__((section(".static_stacks")));
 #endif
 
 // PUBLIC API**********************************************
-#define TASK_HANDLE_IS_VALID(handle) ({ \
-_Static_assert(__builtin_types_compatible_p(typeof(handle), (bad_task_handle_t){0}), "Type of variable differs from bad_task_handle_t");\
-(((handle) & 0xFFFF) != 0xFFFF);\
+#define BAD_TASK_HANDLE_IS_VALID(handle) ({ handle.idx != 0xFFFF; })
+
+#define BAD_TASK_HANDLE_GET_ERROR(handle) ({\
+BAD_TASK_HANDLE_IS_VALID(handle) ? BAD_RTOS_STATUS_OK : handle.gen; \
 })
 
-#define TASK_HANDLE_INVALID_GET_ERROR(handle) ((handle) >> 16)
 extern bad_task_handle_t task_make(bad_task_descr_t *descr);
-extern bad_rtos_status_t task_delay(uint32_t delay, cbptr cb, void *args );
+extern bad_rtos_status_t task_delay(u32 delay, cbptr cb, void *args );
 extern bad_rtos_status_t task_block();
 extern bad_rtos_status_t task_unblock(bad_task_handle_t task);
 extern bad_rtos_status_t task_unblock_from_isr(bad_task_handle_t task);
@@ -1221,29 +1231,29 @@ extern bad_rtos_status_t task_yield();
 extern bad_rtos_status_t task_finish();
 extern bad_rtos_status_t task_delay_cancel(bad_task_handle_t task);
 extern bad_rtos_status_t task_delay_cancel_from_isr(bad_task_handle_t task);
-extern uint32_t sched_lock();
-extern void sched_unlock(uint32_t key);
-extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, uint32_t block_size, uint32_t size_in_bytes);
+extern u32 sched_lock();
+extern void sched_unlock(u32 key);
+extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes);
 extern void* pool_alloc(bad_pool_t *pool);
 extern void pool_free(bad_pool_t *pool, void *obj);
 extern void* gpool_alloc();
 extern void gpool_free(void *obj);
 
 #ifdef BAD_RTOS_USE_KHEAP
-extern void* kernel_alloc(uint32_t size);
-extern void kernel_free(void *block,uint32_t size);
+extern void* kernel_alloc(u32 size);
+extern void kernel_free(void *block, u32 size);
 #endif
 
 #ifdef BAD_RTOS_USE_MUTEX
 extern bad_rtos_status_t mutex_init(bad_mutex_t *mut);
-extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,uint32_t delay);
+extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,u32 delay);
 extern bad_rtos_status_t mutex_put(bad_mutex_t *mut);
 extern bad_rtos_status_t mutex_delete(bad_mutex_t *mut);
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-extern bad_rtos_status_t sem_init(bad_sem_t *sem,uint32_t reset_value);
-extern bad_rtos_status_t sem_take(bad_sem_t *sem,uint32_t delay);
+extern bad_rtos_status_t sem_init(bad_sem_t *sem,u32 reset_value);
+extern bad_rtos_status_t sem_take(bad_sem_t *sem,u32 delay);
 extern bad_rtos_status_t sem_put(bad_sem_t *sem);
 extern bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem);
 extern bad_rtos_status_t sem_delete(bad_sem_t *sem);
@@ -1251,75 +1261,82 @@ extern bad_rtos_status_t sem_delete(bad_sem_t *sem);
 
 #ifdef BAD_RTOS_USE_MSGQ
 #define MSGQ_STATIC_INIT(name,size)\
-_Static_assert((size & (size-1)) == 0, "queue size must be a power of 2"); \
+_Static_assert((size & (size - 1)) == 0, "queue size must be a power of 2"); \
 bad_msg_block_t name##_blocks [size];\
-bad_msgq_t name = {.capacity = size,.msgs = name##_blocks};
+bad_msgq_t name = {.capacity_mask = size - 1,.msgs = name##_blocks};
 
 #ifdef BAD_RTOS_USE_KHEAP
-extern bad_rtos_status_t msgq_acquire_allocate(bad_msgq_t *q, uint16_t capacity);
+extern bad_rtos_status_t msgq_acquire_allocate(bad_msgq_t *q, u16 capacity);
 extern bad_rtos_status_t msgq_release_deallocate(bad_msgq_t *q);
 #endif
 
 extern bad_rtos_status_t msgq_acquire(bad_msgq_t *q);
 extern bad_rtos_status_t msgq_release(bad_msgq_t *q);
-extern bad_rtos_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback, uint32_t delay);
-extern bad_rtos_status_t msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args, uint32_t delay);
-extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, uint32_t signal, void *args);
+extern bad_rtos_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback, u32 delay);
+extern bad_rtos_status_t msgq_post_msg(bad_msgq_t *q, u32 signal, void *args, u32 delay);
+extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args);
 #endif
 
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
 #define EVENT_BARRIER_FLAGS_VALID_MASK (0x80000000UL)
 #define EVENT_BARRIER_FLAGS_ARE_VALID(flags) (!!((flags) & EVENT_BARRIER_FLAGS_VALID_MASK))
-extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, uint32_t count);
-extern uint32_t event_barrier_wait(bad_event_barrier_t *event_barrier, uint32_t delay);
-extern bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier, uint32_t flag);
-extern bad_rtos_status_t event_barrier_fire(bad_event_barrier_t *event_barrier, uint32_t flag);
+extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count);
+extern u32 event_barrier_wait(bad_event_barrier_t *event_barrier, u32 delay);
+extern bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier, u32 flag);
+extern bad_rtos_status_t event_barrier_fire(bad_event_barrier_t *event_barrier, u32 flag);
 extern bad_rtos_status_t event_barrier_delete(bad_event_barrier_t *event_barrier);
 #endif
 
 #ifdef BAD_RTOS_IMPLEMENTATION
 
 #define BAD_RTOS_PRIO_COUNT BAD_RTOS_MAX_TASKS
-typedef enum {
+typedef enum 
+{
     BAD_ISR_OP_MSGQ_WAKE,
     BAD_ISR_OP_SEM_PUT,
     BAD_ISR_OP_TASK_DELAY_CANCEL,
     BAD_ISR_OP_TASK_UNBLOCK,
     BAD_ISR_OP_EVENT_BARRIER_WAKE
-}bad_isr_op_t;
+} bad_isr_op_t;
 
-typedef struct bad_isr_op_obj{
-    struct bad_isr_op_obj * volatile next;
+typedef struct bad_isr_op_obj bad_isr_op_obj_t;
+struct bad_isr_op_obj
+{
+    bad_isr_op_obj_t * volatile next;
     bad_isr_op_t op_kind;
     void *arg;
-    uint32_t pad;
-}bad_isr_op_obj_t;
+    u32 pad;
+};
 
-typedef struct {
+typedef struct 
+{
     bad_isr_op_obj_t * volatile tail;
     bad_isr_op_obj_t * volatile head;
     bad_isr_op_obj_t stub;
-}bad_isr_q_t;
+} bad_isr_q_t;
 
-typedef struct {
-    volatile uint32_t ticks;
-    bad_tcb_t * volatile curr;
-    bad_tcb_t * volatile next;
+typedef struct 
+{
+    volatile u32 ticks;
+    bad_tcb_t *curr;
+    bad_tcb_t *next;
     bad_link_node_t delayq;
-    uint8_t is_running;
-    uint8_t is_unlocked;
-    uint32_t ready_bmask;
+    u8 is_running;
+    u8 is_unlocked;
+    u32 ready_bmask;
     bad_link_node_t readyq[BAD_RTOS_PRIO_COUNT];
     bad_link_node_t blockedq;
     bad_isr_q_t isrq;
-}bad_kernel_cb_t;
+} bad_kernel_cb_t;
 
-typedef struct bitmask_slab_cb{
-    uint32_t free_bitmask;
+typedef struct bitmask_slab_cb
+{
+    u32 free_bitmask;
     bad_tcb_t node_arr[BAD_RTOS_MAX_TASKS];
 } tcb_bitmask_slab_t;
 
-typedef enum {
+typedef enum 
+{
     BAD_SYSTICK_TIMEFRAME_PENDING = 0x1,
     BAD_SYSTICK_DELAY_WAKE_PENDING = 0x2,
     BAD_SYSTICK_BOTH = BAD_SYSTICK_DELAY_WAKE_PENDING|BAD_SYSTICK_TIMEFRAME_PENDING//0x3
@@ -1358,20 +1375,21 @@ _Static_assert( 1
 #endif
                ,"What have i done #2");
 
-static uint8_t  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES];
+static u8  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES];
 static bad_pool_t gpool;
 #ifdef BAD_RTOS_USE_KHEAP
 
-typedef struct {
-    uint8_t* heap;
-    uint32_t heads_bmask;
-    uint32_t max_order;
-    uint32_t min_order;
+typedef struct 
+{
+    u8* heap;
+    u32 heads_bmask;
+    u32 max_order;
+    u32 min_order;
     bad_link_node_t* free_list;
-    uint32_t* bmask;
-}bad_buddy_t;
+    u32* bmask;
+} bad_buddy_t;
 #define BUDDY_BITMASK_SIZE(max_order,min_order)\
-(((1 << (max_order - min_order))-1)+31) >> 5 // bits required = (2 ^ max_order - min_order) - 1, to get the words divide by 32 and round up 
+(((1 << (max_order - min_order)) - 1) + 31) >> 5 // bits required = (2 ^ max_order - min_order) - 1, to get the words divide by 32 and round up 
 
 #ifndef KMIN_ORDER
 #define KMIN_ORDER 5
@@ -1388,16 +1406,16 @@ typedef struct {
 #error "Its called max order for a reason"
 #endif
 #endif 
-#define KHEAP_SIZE 1<<KMAX_ORDER
-#define KFREE_LIST_SIZE (KMAX_ORDER-KMIN_ORDER+1)
+#define KHEAP_SIZE 1 << KMAX_ORDER
+#define KFREE_LIST_SIZE (KMAX_ORDER-KMIN_ORDER + 1)
 
-static uint8_t __attribute__((section(".kheap"))) kheap[KHEAP_SIZE];
+static u8 __attribute__((section(".kheap"))) kheap[KHEAP_SIZE];
 static bad_buddy_t __attribute__((section(".kernel_bss")))kernel_buddy;
 static bad_link_node_t __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIST_SIZE];
-static uint32_t __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_SIZE(KMAX_ORDER, KMIN_ORDER)]; 
+static u32 __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_SIZE(KMAX_ORDER, KMIN_ORDER)]; 
 #endif
 
-#define IDLE_TASK_PRIO BAD_RTOS_PRIO_COUNT-1
+#define IDLE_TASK_PRIO BAD_RTOS_PRIO_COUNT - 1
 #define IDLE_TASK_STACK_SIZE 128
 
 TASK_STATIC_STACK(idle, IDLE_TASK_STACK_SIZE)
@@ -1406,20 +1424,20 @@ extern void idle_task(void *);
 extern void __first_task_start();
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-extern bad_rtos_status_t __svc_sem_take(bad_sem_t *sem,uint32_t delay);
+extern bad_rtos_status_t __svc_sem_take(bad_sem_t *sem,u32 delay);
 extern bad_rtos_status_t __svc_sem_put(bad_sem_t *sem);
 #endif
 
-static inline uint32_t __attribute__((always_inline)) __get_ipsr();
-static inline uint32_t __attribute__((always_inline)) __modify_basepri(uint32_t basepri);
-static inline void __attribute__((always_inline)) __restore_basepri(uint32_t basepri);
-static inline uint32_t __attribute__((always_inline)) __ldrex(volatile uint32_t* addr);
-static inline uint32_t  __attribute__((always_inline)) __strex(uint32_t val,volatile uint32_t* addr);
-static inline uint16_t __attribute__((always_inline)) __ldrexh(volatile uint16_t* addr);
-static inline uint32_t  __attribute__((always_inline)) __strexh(uint16_t val,volatile uint16_t* addr);
+static inline u32 __attribute__((always_inline)) __get_ipsr();
+static inline u32 __attribute__((always_inline)) __modify_basepri(u32 basepri);
+static inline void __attribute__((always_inline)) __restore_basepri(u32 basepri);
+static inline u32 __attribute__((always_inline)) __ldrex(volatile u32* addr);
+static inline u32  __attribute__((always_inline)) __strex(u32 val,volatile u32* addr);
+static inline u16 __attribute__((always_inline)) __ldrexh(volatile u16* addr);
+static inline u32  __attribute__((always_inline)) __strexh(u16 val,volatile u16* addr);
 static inline void  __attribute__((always_inline)) __clrex();
-static inline void __attribute__((always_inline)) __set_control(uint32_t control);
-static inline uint32_t __attribute__((always_inline)) __get_control();
+static inline void __attribute__((always_inline)) __set_control(u32 control);
+static inline u32 __attribute__((always_inline)) __get_control();
 static inline void __attribute__((always_inline)) __dmb();
 static inline void __attribute__((always_inline)) __dsb();
 static inline void __attribute__((always_inline)) __isb();
@@ -1427,10 +1445,8 @@ static inline void __attribute__((always_inline)) __isb();
 #define BAD_OPT_BARRIER __asm__ volatile("":::"memory")
 #define BAD_RTOS_STATIC static 
 
-#define BAD_TASK_HANDLE_GEN(gen) ((gen) << 16)
-#define BAD_TASK_HANDLE_GET_IDX(handle) ((handle) & 0xFFFF)
-#define BAD_TASK_HANDLE_GET_GEN(handle) ((handle) >> 16)
-#define BAD_TASK_HANDLE_INVALID_HANDLE(error) ((error) << 16|0xFFFF)
+#define __TASK_HANDLE_INVALID_HANDLE(error) (bad_task_handle_t){.gen = error, .idx = 0xFFFF}
+#define __TASK_HANDLE_IS_VALID(tcb,handle) ({handle.idx && tcb && tcb->generation == handle.gen;})
 
 #define BAD_CONTAINER_OF(ptr, type, member) ({ \
 _Static_assert(__builtin_types_compatible_p(typeof(*(ptr)), typeof(((type *)0)->member)), \
@@ -1438,76 +1454,75 @@ _Static_assert(__builtin_types_compatible_p(typeof(*(ptr)), typeof(((type *)0)->
 ((type *)( (char *)(ptr) - __builtin_offsetof(type, member) ));\
 })
 
-
-
 //Linker script symbols
-extern uint8_t __kernel_bss;
-extern uint8_t __ekernel_bss;
+extern u8 __kernel_bss;
+extern u8 __ekernel_bss;
 
-extern uint8_t __kernel_data;
-extern uint8_t __ekernel_data;
-extern uint8_t __rkernel_data;
+extern u8 __kernel_data;
+extern u8 __ekernel_data;
+extern u8 __rkernel_data;
 
-extern uint8_t __static_stacks;
+extern u8 __static_stacks;
 
-extern uint8_t __heap;
+extern u8 __heap;
 
-extern uint8_t __dma_buffs;
+extern u8 __dma_buffs;
 
+#define BAD_RTOS_ASM_LOAD_PSPLIM "ldr r1,[r2,#4] \n" "msr psplim,r1 \n"
 
-//Hardware helpers
 //Taken from core_cm33.h from CMSIS, Apache License, Version 2.0 
-
-typedef struct{
-    volatile uint32_t CPUID;                
-    volatile uint32_t ICSR;                 
-    volatile uint32_t VTOR;                 
-    volatile uint32_t AIRCR;                
-    volatile uint32_t SCR;                  
-    volatile uint32_t CCR;                  
-    volatile uint8_t  SHP[12U];             
-    volatile uint32_t SHCSR;                
-    volatile uint32_t CFSR;                 
-    volatile uint32_t HFSR;                 
-    volatile uint32_t DFSR;                 
-    volatile uint32_t MMFAR;                
-    volatile uint32_t BFAR;                 
-    volatile uint32_t AFSR;                 
-    volatile uint32_t ID_PFR[2U];           
-    volatile uint32_t ID_DFR;               
-    volatile uint32_t ID_AFR;               
-    volatile uint32_t ID_MMFR[4U];          
-    volatile uint32_t ID_ISAR[6U];          
-    volatile uint32_t CLIDR;                
-    volatile uint32_t CTR;                  
-    volatile uint32_t CCSIDR;               
-    volatile uint32_t CSSELR;               
-    volatile uint32_t CPACR;                
-    volatile uint32_t NSACR;                
-    uint32_t RESERVED7[21U];
-    volatile uint32_t SFSR;                 
-    volatile uint32_t SFAR;                 
-    uint32_t RESERVED3[69U];
-    volatile  uint32_t STIR;                
-    uint32_t RESERVED4[15U];
-    volatile uint32_t MVFR0;                
-    volatile uint32_t MVFR1;                
-    volatile uint32_t MVFR2;                
-    uint32_t RESERVED5[1U];
-    volatile uint32_t ICIALLU;              
-    uint32_t RESERVED6[1U];
-    volatile uint32_t ICIMVAU;              
-    volatile uint32_t DCIMVAC;              
-    volatile uint32_t DCISW;                
-    volatile uint32_t DCCMVAU;              
-    volatile uint32_t DCCMVAC;              
-    volatile uint32_t DCCSW;                
-    volatile uint32_t DCCIMVAC;             
-    volatile uint32_t DCCISW;               
-    volatile uint32_t BPIALL;               
+typedef struct
+{
+    volatile u32 CPUID;                
+    volatile u32 ICSR;                 
+    volatile u32 VTOR;                 
+    volatile u32 AIRCR;                
+    volatile u32 SCR;                  
+    volatile u32 CCR;                  
+    volatile u8  SHP[12U];             
+    volatile u32 SHCSR;                
+    volatile u32 CFSR;                 
+    volatile u32 HFSR;                 
+    volatile u32 DFSR;                 
+    volatile u32 MMFAR;                
+    volatile u32 BFAR;                 
+    volatile u32 AFSR;                 
+    volatile u32 ID_PFR[2U];           
+    volatile u32 ID_DFR;               
+    volatile u32 ID_AFR;               
+    volatile u32 ID_MMFR[4U];          
+    volatile u32 ID_ISAR[6U];          
+    volatile u32 CLIDR;                
+    volatile u32 CTR;                  
+    volatile u32 CCSIDR;               
+    volatile u32 CSSELR;               
+    volatile u32 CPACR;                
+    volatile u32 NSACR;                
+    u32 RESERVED7[21U];
+    volatile u32 SFSR;                 
+    volatile u32 SFAR;                 
+    u32 RESERVED3[69U];
+    volatile  u32 STIR;                
+    u32 RESERVED4[15U];
+    volatile u32 MVFR0;                
+    volatile u32 MVFR1;                
+    volatile u32 MVFR2;                
+    u32 RESERVED5[1U];
+    volatile u32 ICIALLU;              
+    u32 RESERVED6[1U];
+    volatile u32 ICIMVAU;              
+    volatile u32 DCIMVAC;              
+    volatile u32 DCISW;                
+    volatile u32 DCCMVAU;              
+    volatile u32 DCCMVAC;              
+    volatile u32 DCCSW;                
+    volatile u32 DCCIMVAC;             
+    volatile u32 DCCISW;               
+    volatile u32 BPIALL;               
 } bad_scb_typedef_t;
 
-typedef enum{
+typedef enum
+{
     BAD_SCB_MEMORY_MANAGEMENT_INTR = 0,
     BAD_SCB_BUS_FAULT_INTR = 1,
     BAD_SCB_USAGE_FAULT_INTR = 2,
@@ -1515,18 +1530,20 @@ typedef enum{
     BAD_SCB_DEBUG_MONITOR_INTR = 8,
     BAD_SCB_PENDSV_INTR = 10,
     BAD_SCB_SYSTICK_INTR = 11
-}bad_scb_core_interrupt_t;
+} bad_scb_core_interrupt_t;
 
-typedef enum {
+typedef enum 
+{
     BAD_SCB_PRIO0 = 0,
     BAD_SCB_LOWEST_PRIO = ((1 << BAD_RTOS_PRIO_BITS) - 1)
-}bad_scb_interrupt_priority_t;
+} bad_scb_interrupt_priority_t;
 
-typedef enum{
+typedef enum
+{
     BAD_SCB_FPU_NO_ACCESS = 0,
     BAD_SCB_FPU_PRIV_ACCESS = 5,
     BAD_SCB_FPU_FULL_ACCESS = 15,
-}bad_scb_fpu_permission_t;
+} bad_scb_fpu_permission_t;
 
 #define BAD_SCB_BASE (0xE000ED00UL)
 #define BAD_SCB ((bad_scb_typedef_t *) BAD_SCB_BASE)
@@ -1536,15 +1553,18 @@ typedef enum{
 #define BAD_SCB_CPACR_FPU_SHIFT                 20U
 #define BAD_SCB_CPACR_FPU_MASK                  (0xF << BAD_SCB_CPACR_FPU_SHIFT)
 
-BAD_RTOS_STATIC void __scb_trigger_pendsv(){
+static inline void __scb_trigger_pendsv()
+{
     BAD_SCB->ICSR = BAD_SCB_ICSR_PENDSVSET;
 }
 
-BAD_RTOS_STATIC void __scb_set_core_interrupt_priority(bad_scb_core_interrupt_t intr, bad_scb_interrupt_priority_t prio){
+static inline void __scb_set_core_interrupt_priority(bad_scb_core_interrupt_t intr, bad_scb_interrupt_priority_t prio)
+{
     BAD_SCB->SHP[intr] = prio << (8 - BAD_RTOS_PRIO_BITS);
 }
 
-BAD_RTOS_STATIC void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms){
+static inline void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms)
+{
     BAD_SCB->CPACR &= ~(BAD_SCB_CPACR_FPU_MASK);
     BAD_SCB->CPACR |= perms << BAD_SCB_CPACR_FPU_SHIFT;
     __dsb();
@@ -1552,76 +1572,70 @@ BAD_RTOS_STATIC void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t per
 } 
 
 #ifdef BAD_RTOS_USE_FPU
-
 //Taken from core_cm33.h from CMSIS, Apache License, Version 2.0 
-typedef struct{
-    volatile uint32_t FPCCR;
-    volatile uint32_t FPCAR;
-    volatile uint32_t FPDCR;
-    volatile uint32_t MVFR0;
-    volatile uint32_t MVFR1;
-}bad_fpu_typedef_t;
+typedef struct
+{
+    volatile u32 FPCCR;
+    volatile u32 FPCAR;
+    volatile u32 FPDCR;
+    volatile u32 MVFR0;
+    volatile u32 MVFR1;
+} bad_fpu_typedef_t;
 
 #define BAD_FPU_BASE (0xE000EF34UL)
 #define BAD_FPU ((volatile bad_fpu_typedef_t *)BAD_FPU_BASE)
 
-typedef enum {
+typedef enum 
+{
     BAD_FPU_FEATURE_DISALOW_UNPRIV_CHANGE = 0,
     BAD_FPU_FEATURE_ALLOW_UNPRIV_CHANGE = 1,
     BAD_FPU_FEATURE_DISABLE_AUTO_STACKING = 0,
     BAD_FPU_FEATURE_ENABLE_AUTO_STACKING = 0x80000000,
     BAD_FPU_FEATURE_DISABLE_LAZY_STACKING = 0,
     BAD_FPU_FEATURE_ENABLE_LAZY_STACKING = 0x40000000
-}bad_fpu_features_t;
+} bad_fpu_features_t;
 
-BAD_RTOS_STATIC void __fpu_init(bad_fpu_features_t features){
+static inline void __fpu_init(bad_fpu_features_t features)
+{
     BAD_FPU->FPCCR = features;
     __dsb();
     __isb();
 }
 
 #define BAD_RTOS_FPU_SETTINGS (BAD_FPU_FEATURE_ENABLE_LAZY_STACKING|BAD_FPU_FEATURE_ENABLE_AUTO_STACKING)
-
 #endif
 
 #ifdef BAD_RTOS_USE_MPU
-
 //Taken from core_cm33.h from CMSIS, Apache License, Version 2.0 
 typedef struct
 {
-    volatile uint32_t TYPE;                   
-    volatile uint32_t CTRL;                   
-    volatile uint32_t RNR;                    
-    volatile uint32_t RBAR;                   
-    volatile uint32_t RLAR;                   
-    volatile uint32_t RBAR_A1;                
-    volatile uint32_t RLAR_A1;                
-    volatile uint32_t RBAR_A2;                
-    volatile uint32_t RLAR_A2;                
-    volatile uint32_t RBAR_A3;                
-    volatile uint32_t RLAR_A3;                
-    uint32_t RESERVED0[1];
-    volatile uint32_t MAIR[2];
+    volatile u32 TYPE;                   
+    volatile u32 CTRL;                   
+    volatile u32 RNR;                    
+    volatile u32 RBAR;                   
+    volatile u32 RLAR;                   
+    volatile u32 RBAR_A1;                
+    volatile u32 RLAR_A1;                
+    volatile u32 RBAR_A2;                
+    volatile u32 RLAR_A2;                
+    volatile u32 RBAR_A3;                
+    volatile u32 RLAR_A3;                
+    u32 RESERVED0[1];
+    volatile u32 MAIR[2];
 } bad_mpu_typedef_t;
 
-#define BAD_MPU_BASE (0xE000ED90UL)
-#define BAD_MPU ((bad_mpu_typedef_t *)BAD_MPU_BASE)
-
-#define BAD_MPU_CTRL_ENABLE (0x1)
-#define BAD_MPU_CTRL_DEFAULT_MAP (0x4)
-#define BAD_MPU_MAIR_READ_ALLOCATE  (0x1)
-#define BAD_MPU_MAIR_WRITE_ALLOCATE (0x2)
-#define BAD_MPU_MAIR_SET_REGION(settings,idx) ((settings)<<((idx) * 8))
-#define BAD_MPU_MAIR_NORMAL_SETTING(outer,inner) (((outer) << 4)|(inner))
-
-typedef enum{
+typedef enum
+{
     BAD_MPU_MAIR_DEVICE_NGNRNE = 0x0,
     BAD_MPU_MAIR_DEVICE_NGNRE = 0x4,
     BAD_MPU_MAIR_DEVICE_NGRE = 0x8,
     BAD_MPU_MAIR_DEVICE_GRE = 0xC
-}bad_mpu_mair_device_states_t;
+} bad_mpu_mair_device_states_t;
 
-typedef enum{
+typedef enum
+{
+#define BAD_MPU_MAIR_READ_ALLOCATE  (0x1)
+#define BAD_MPU_MAIR_WRITE_ALLOCATE (0x2)
     BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RA_WA = 0x3,
     BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RA_WN = 0x2,
     BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RN_WA = 0x1,
@@ -1643,56 +1657,214 @@ typedef enum{
     BAD_MPU_MAIR_NORMAL_WB_NON_TRANSIENT_RA_WN = 0xC | BAD_MPU_MAIR_READ_ALLOCATE,
     BAD_MPU_MAIR_NORMAL_WB_NON_TRANSIENT_RN_WA = 0xC | BAD_MPU_MAIR_WRITE_ALLOCATE
         
-}bad_mpu_mair_normal_states_t;
+} bad_mpu_mair_normal_states_t;
 
-BAD_RTOS_STATIC void __mpu_enable_with_default_map(){
+typedef enum
+{
+    BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_FAULT    = 0x0,
+    BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW       = 0x2,
+    BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT    = 0x4,
+    BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO       = 0x6
+} bad_mpu_ap_states_t;
+
+typedef enum
+{
+    BAD_MPU_RBAR_SH_NON_SHAREABLE   = 0x0,
+    BAD_MPU_RBAR_SH_OUTER_SHAREABLE = 0x8,
+    BAD_MPU_RBAR_SH_INNER_SHAREABLE = 0x10
+} bad_mpu_sh_states_t;
+
+#define BAD_MPU_BASE (0xE000ED90UL)
+#define BAD_MPU ((bad_mpu_typedef_t *)BAD_MPU_BASE)
+
+#define BAD_MPU_CTRL_ENABLE (0x1)
+#define BAD_MPU_CTRL_DEFAULT_MAP (0x4)
+#define BAD_MPU_MAIR_SET_REGION(settings,idx) ((settings) << ((idx) * 8))
+#define BAD_MPU_MAIR_NORMAL_SETTING(outer,inner) (((outer) << 4)|(inner))
+
+#define BAD_RTOS_DEVICE_GRE_MAIR_IDX               (0)
+#define BAD_RTOS_DEVICE_NGRE_MAIR_IDX              (1)
+#define BAD_RTOS_NORMAL_NON_CACHEABLE              (2)
+#define BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX   (3)
+#define BAD_RTOS_NORMAL_NT_CACHEABLE_WT_MAIR_IDX   (4)
+#define BAD_RTOS_NORMAL_TR_CACHEABLE_WB_MAIR_IDX   (5)
+#define BAD_RTOS_NORMAL_TR_CACHEABLE_WT_MAIR_IDX   (6)
+
+#define BAD_MPU_RBAR_XN (0x1)
+#define BAD_MPU_RLAR_EN (0x1)
+
+#define BAD_MPU_RLAR_SET_MAIR_IDX(idx) ((idx) << 1)
+
+#define BAD_RTOS_STACK_RBAR     (BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW | BAD_MPU_RBAR_XN)
+#define BAD_RTOS_STACK_RLAR     (BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX) | BAD_MPU_RLAR_EN)
+
+#define BAD_RTOS_ASM_SET_RNR "mov r1, #0 \n" "str r1,[r12] \n"
+
+static inline void __mpu_enable_with_default_map()
+{
     __dmb();
     BAD_MPU->CTRL = BAD_MPU_CTRL_ENABLE | BAD_MPU_CTRL_DEFAULT_MAP;
     __dsb();
     __isb();
 }
 
-#define BAD_RTOS_MAIR_SETTINGS \
-BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
-BAD_MPU_MAIR_NORMAL_WB_NON_TRANSIENT_RA_WA,\
-BAD_MPU_MAIR_NORMAL_WB_NON_TRANSIENT_RA_WA),BAD_RTOS_NORMAL_MAIR_IDX)|\
+#define BAD_RTOS_MAIR0_SETTINGS \
+BAD_MPU_MAIR_SET_REGION(\
+BAD_MPU_MAIR_DEVICE_GRE,BAD_RTOS_DEVICE_GRE_MAIR_IDX) | \
+BAD_MPU_MAIR_SET_REGION(\
+BAD_MPU_MAIR_DEVICE_NGRE,BAD_RTOS_DEVICE_NGRE_MAIR_IDX) | \
 BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
 BAD_MPU_MAIR_NORMAL_NON_CACHEABLE,\
-BAD_MPU_MAIR_NORMAL_NON_CACHEABLE),BAD_RTOS_DMA_BUFF_MAIR_IDX)|\
-BAD_MPU_MAIR_SET_REGION(\
-BAD_MPU_MAIR_DEVICE_NGNRE,BAD_RTOS_DEVICE_MAIR_IDX)
+BAD_MPU_MAIR_NORMAL_NON_CACHEABLE), BAD_RTOS_NORMAL_NON_CACHEABLE) |\
+BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
+BAD_MPU_MAIR_NORMAL_WB_NON_TRANSIENT_RA_WA,\
+BAD_MPU_MAIR_NORMAL_WB_NON_TRANSIENT_RA_WA), BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX)
 
-START_TASK_MPU_REGIONS_DEFINITIONS(zeroed) //Fallback zeroed regions array
-END_TASK_MPU_REGIONS(zeroed)
+#define BAD_RTOS_MAIR1_SETTINGS \
+BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
+BAD_MPU_MAIR_NORMAL_WT_NON_TRANSIENT_RA_WA,\
+BAD_MPU_MAIR_NORMAL_WT_NON_TRANSIENT_RA_WA), BAD_RTOS_NORMAL_NT_CACHEABLE_WT_MAIR_IDX - 4)|\
+BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
+BAD_MPU_MAIR_NORMAL_WB_TRANSIENT_RA_WA,\
+BAD_MPU_MAIR_NORMAL_WB_TRANSIENT_RA_WA), BAD_RTOS_NORMAL_TR_CACHEABLE_WB_MAIR_IDX - 4)|\
+BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
+BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RA_WA,\
+BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RA_WA), BAD_RTOS_NORMAL_TR_CACHEABLE_WT_MAIR_IDX - 4)
 
-START_TASK_MPU_REGIONS_DEFINITIONS(idle)
-DEFINE_STATIC_STACK_REGION(idle_stack,IDLE_TASK_STACK_SIZE)
-END_TASK_MPU_REGIONS(idle)
-
-BAD_RTOS_STATIC void __mpu_default_init(){
-    BAD_MPU->MAIR[0] = BAD_RTOS_MAIR_SETTINGS;
+static inline void __mpu_default_init()
+{
+    BAD_MPU->MAIR[0] = BAD_RTOS_MAIR0_SETTINGS;
+    BAD_MPU->MAIR[1] = BAD_RTOS_MAIR1_SETTINGS;
     
     // 0x0, force a fault through overlapping regions lol
     BAD_MPU->RNR = 4;
-    BAD_MPU->RBAR = (0x08000000) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
-    BAD_MPU->RLAR = (0x08000000) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_MAIR_IDX);  
+    BAD_MPU->RBAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
+    BAD_MPU->RLAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
     
     //global data
     BAD_MPU->RNR = 5;
-    BAD_MPU->RBAR = (uint32_t)(&__heap) | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
-    BAD_MPU->RLAR = ((uint32_t)(&__dma_buffs) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_MAIR_IDX);
+    BAD_MPU->RBAR = (u32)(&__heap) | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
+    BAD_MPU->RLAR = ((u32)(&__dma_buffs) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NON_CACHEABLE);
     
     //flash region
     BAD_MPU->RNR = 6;
-    BAD_MPU->RBAR = (0x08000000) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
-    BAD_MPU->RLAR = (0x08000000 + BAD_RTOS_FLASH_SIZE) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_MAIR_IDX);
+    BAD_MPU->RBAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
+    BAD_MPU->RLAR = (BAD_RTOS_FLASH_RO_ADDR + BAD_RTOS_FLASH_RO_SIZE - 32) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
     
     //kernel data 
     BAD_MPU->RNR = 7;
-    BAD_MPU->RBAR = (uint32_t)(&__kernel_bss) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
-    BAD_MPU->RLAR = ((uint32_t)(&__ekernel_data) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_MAIR_IDX); 
+    BAD_MPU->RBAR = (u32)(&__kernel_bss) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
+    BAD_MPU->RLAR = ((u32)(&__ekernel_data) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
     
     __mpu_enable_with_default_map();
+}
+
+static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, bad_task_descr_t *descr)
+{
+    
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
+    //Stack region
+    if(!tcb->dyn_stack)
+    {
+        u32 addr_cast = (u32)tcb->stack;
+        bad_mpu_region_t *stack_region = &tcb->regions[0];
+        stack_region->__reg0 = addr_cast | BAD_RTOS_STACK_RBAR;
+        stack_region->__reg1 = (addr_cast + tcb->stack_size) | BAD_RTOS_STACK_RLAR;
+    }
+    { //User regions
+        u32 i = 1;
+        if(descr && descr->regions)
+        {
+            for(; i < 4; i++)
+            {
+                bad_mpu_region_t *region = &tcb->regions[i];
+                const bad_mpu_user_region_t *user_region = &descr->regions[i - 1];
+                u32 addr_cast = (u32)user_region->addr;
+                
+                if(user_region->type == BAD_MPU_REGION_NONE)
+                    break;
+                
+                if(user_region->size % 32 || addr_cast % 32)
+                {
+                    ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+                    goto exit;
+                }
+                
+                if(user_region->type < BAD_MPU_REGION_MAX)
+                {
+                    u32 reg0_mask = 0;
+                    u32 reg1_mask = 0;
+                    u32 priv = user_region->settings & BAD_MPU_PRIV_MASK;
+                    
+                    if(priv == BAD_MPU_PRIV_RW_UNPRIV_FAULT)
+                        reg0_mask |= BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_FAULT;
+                    else if(priv == BAD_MPU_PRIV_RW_UNPRIV_RW)
+                        reg0_mask |= BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
+                    else if(priv == BAD_MPU_PRIV_RO_UNPRIV_FAULT)
+                        reg0_mask |= BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
+                    else if(priv == BAD_MPU_PRIV_RO_UNPRIV_RO)
+                        reg0_mask |= BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
+                    else
+                    {
+                        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+                        goto exit;
+                    }
+                    
+                    u32 sh = user_region->settings & BAD_MPU_SH_MASK;
+                    
+                    if(sh == BAD_MPU_NON_SHAREABLE)
+                        reg0_mask |= BAD_MPU_RBAR_SH_NON_SHAREABLE;
+                    else if(sh == BAD_MPU_INNER_SHAREABLE)
+                        reg0_mask |= BAD_MPU_RBAR_SH_INNER_SHAREABLE;
+                    else if(sh == BAD_MPU_OUTER_SHAREABLE)
+                        reg0_mask |= BAD_MPU_RBAR_SH_OUTER_SHAREABLE;
+                    else
+                    {
+                        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+                        goto exit;
+                    }
+                    
+                    if(user_region->settings & BAD_MPU_EXECUTE_NEVER)
+                        reg0_mask |= BAD_MPU_RBAR_XN;
+                    
+                    u32 mair_idx = user_region->type - 1;
+                    reg1_mask = BAD_MPU_RLAR_SET_MAIR_IDX(mair_idx) | BAD_MPU_RLAR_EN;
+                    
+                    region->__reg0 = addr_cast | reg0_mask;
+                    region->__reg1 = (addr_cast + user_region->size - 32) | reg1_mask;
+                }
+                else
+                {
+                    ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+                }
+            }
+        }
+        
+        for(; i < 4; i++)
+        {
+            tcb->regions[i] = (bad_mpu_region_t){0};
+        }
+    }
+    
+    exit:
+    return ret;
+}
+
+static inline u32 __mpu_kernel_region_save_unlock()
+{
+    u32 kernel_rlar = BAD_MPU->RLAR;
+    BAD_MPU->RLAR = kernel_rlar & ~(BAD_MPU_RLAR_EN);
+    __dsb();
+    __isb();
+    
+    return kernel_rlar;
+}
+
+static inline void __mpu_kernel_region_restore_lock(u32 key)
+{
+    BAD_MPU->RLAR = key;
+    __dsb();
 }
 #endif
 
@@ -1700,107 +1872,123 @@ BAD_RTOS_STATIC void __mpu_default_init(){
 #ifdef BAD_RTOS_USE_KHEAP
 
 void  __buddy_init(bad_buddy_t *cb,
-                   uint8_t *heap, 
+                   u8 *heap, 
                    bad_link_node_t *freelist,
-                   uint32_t min_order, 
-                   uint32_t max_order, 
-                   uint32_t *bmask)
+                   u32 min_order, 
+                   u32 max_order, 
+                   u32 *bmask)
 {
     cb->min_order = min_order;
     cb->max_order = max_order;
     cb->heap = heap;
     cb->free_list = freelist;
     cb->bmask = bmask;
+    
     bad_link_node_t* embedded_node = (bad_link_node_t*)cb->heap;
     cb->free_list->next = embedded_node;
     cb->free_list->prev = embedded_node;
     embedded_node->prev = cb->free_list;
     embedded_node->next = cb->free_list;
-    for (uint32_t i = 1; i < max_order - min_order + 1; i++){
+    
+    for (u32 i = 1; i < max_order - min_order + 1; i++)
+    {
         cb->free_list[i].next = &cb->free_list[i];
         cb->free_list[i].prev = &cb->free_list[i];
     }
+    
     cb->heads_bmask = 1;
 }
 
-static void* __buddy_alloc(bad_buddy_t *cb,uint32_t order){
-    if(order > cb->max_order ){
-        return 0;
-    }
-    uint32_t idx = cb->max_order  - order;
-    uint32_t order_mask = (1 << (idx + 1)) - 1;
-    
-    uint32_t picked_idx = 31 - __builtin_clz(cb->heads_bmask & order_mask);
-    if(picked_idx == UINT32_MAX){
+static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
+{
+    if(order > cb->max_order )
+    {
         return 0;
     }
     
-    uint32_t splits = idx - picked_idx;
-    uint8_t *block_for_split = (uint8_t*)cb->free_list[picked_idx].next;
+    u32 idx = cb->max_order  - order;
+    u32 order_mask = (1 << (idx + 1)) - 1;
+    
+    u32 picked_idx = 31 - __builtin_clz(cb->heads_bmask & order_mask);
+    
+    if(picked_idx == UINT32_MAX)
+    {
+        return 0;
+    }
+    
+    u32 splits = idx - picked_idx;
+    u8 *block_for_split = (u8 *)cb->free_list[picked_idx].next;
+    
     cb->free_list[picked_idx].next = cb->free_list[picked_idx].next->next;
     cb->free_list[picked_idx].next->prev = &cb->free_list[picked_idx];
-    cb->heads_bmask ^= (uint32_t)(&cb->free_list[idx] == cb->free_list[idx].next) << picked_idx;
-    uint32_t splited_block_size = 1 << (cb->max_order - picked_idx-1);
-    bad_link_node_t *unused_block;
-    uint32_t bmaskidx, bmask_word, bmask_bit,offset_from_base;
+    cb->heads_bmask ^= (u32)(&cb->free_list[idx] == cb->free_list[idx].next) << picked_idx;
     
-    if(picked_idx){
+    u32 splited_block_size = 1 << (cb->max_order - picked_idx-1);
+    
+    bad_link_node_t *unused_block;
+    u32 bmaskidx, bmask_word, bmask_bit,offset_from_base;
+    
+    if(picked_idx)
+    {
         offset_from_base =  block_for_split - cb->heap;
-        bmaskidx = ((1<<(picked_idx-1))-1) + ((offset_from_base) >> ( cb->max_order - picked_idx+1));
+        bmaskidx = ((1 << (picked_idx - 1)) - 1) + ((offset_from_base) >> (cb->max_order - picked_idx + 1));
         bmask_word = bmaskidx >> 5;
         bmask_bit = bmaskidx & 31;
         cb->bmask[bmask_word] ^= 1 << bmask_bit; 
     }
     
-    
-    for(uint32_t i = 0; i < splits;i++){
-        unused_block = (bad_link_node_t *)(block_for_split+splited_block_size);
-        unused_block->next = cb->free_list[picked_idx+1].next;
+    for(u32 i = 0; i < splits;i++)
+    {
+        unused_block = (bad_link_node_t *)(block_for_split + splited_block_size);
+        unused_block->next = cb->free_list[picked_idx + 1].next;
         cb->free_list[picked_idx+1].next = unused_block;
         unused_block->prev = &cb->free_list[picked_idx+1];
         unused_block->next->prev = unused_block;
         
-        offset_from_base = (uint8_t*)unused_block - cb->heap;
-        bmaskidx = ((1<<(picked_idx))-1) + ((offset_from_base) >> ( cb->max_order - picked_idx));
+        offset_from_base = (u8 *)unused_block - cb->heap;
+        bmaskidx = ((1 << (picked_idx)) - 1) + ((offset_from_base) >> (cb->max_order - picked_idx));
         bmask_word = bmaskidx >> 5;
         bmask_bit = bmaskidx & 31;
         cb->bmask[bmask_word] ^= 1 << bmask_bit;        
         picked_idx++;
         cb->heads_bmask |= (1 << picked_idx);
-        splited_block_size>>=1;
+        splited_block_size >>= 1;
     }
     
     return block_for_split;
 }
 
-static void __buddy_free(bad_buddy_t *cb,void *block,uint32_t order ){
+static void __buddy_free(bad_buddy_t *cb,void *block,u32 order )
+{
     
-    if(order > cb->max_order){
+    if(order > cb->max_order)
+    {
         return;
     }
     
-    uint32_t curr_order = order; 
+    u32 curr_order = order; 
     void *curr_block = block;
-    uint32_t idx = 0;
+    u32 idx = 0;
     
-    while((idx = cb->max_order - curr_order)){
-        uint32_t buddy_bitmask = 1ULL << curr_order;
+    while((idx = cb->max_order - curr_order))
+    {
+        u32 buddy_bitmask = 1ULL << curr_order;
         
-        uint32_t offset_from_base = (uint8_t *)curr_block - cb->heap;
+        u32 offset_from_base = (u8 *)curr_block - cb->heap;
         
-        uint32_t bmaskidx =  ((1<<(idx-1))-1) + ((offset_from_base) >> (curr_order + 1));
-        uint32_t bmask_word = bmaskidx >> 5;
-        uint32_t bmask_bit = bmaskidx & 31;
-        
+        u32 bmaskidx =  ((1 << (idx - 1)) - 1) + ((offset_from_base) >> (curr_order + 1));
+        u32 bmask_word = bmaskidx >> 5;
+        u32 bmask_bit = bmaskidx & 31;
         
         cb->bmask[bmask_word] ^= 1 << bmask_bit;
         
-        if(cb->bmask[bmask_word] & 1 << bmask_bit){
+        if(cb->bmask[bmask_word] & 1 << bmask_bit)
+        {
             break;
         }
         
-        uint32_t buddy_offset = offset_from_base ^ buddy_bitmask;
-        uint32_t parent_offset = offset_from_base &(~buddy_bitmask);
+        u32 buddy_offset = offset_from_base ^ buddy_bitmask;
+        u32 parent_offset = offset_from_base &(~buddy_bitmask);
         void *buddy_addr = (void*)(cb->heap + buddy_offset);
         void *parent_addr = (void*)(cb->heap + parent_offset); 
         
@@ -1810,7 +1998,9 @@ static void __buddy_free(bad_buddy_t *cb,void *block,uint32_t order ){
         buddy->next->prev = buddy->prev;
         buddy->prev = 0;
         buddy->next = 0;
-        cb->heads_bmask ^= (uint32_t)(&cb->free_list[idx] == cb->free_list[idx].next) << idx;
+        
+        cb->heads_bmask ^= (u32)(&cb->free_list[idx] == cb->free_list[idx].next) << idx;
+        
         curr_order++;
         curr_block = parent_addr;
     }
@@ -1827,89 +2017,119 @@ static void __buddy_free(bad_buddy_t *cb,void *block,uint32_t order ){
 
 #ifdef BAD_RTOS_USE_KHEAP
 
-BAD_RTOS_STATIC void* __kernel_alloc(uint32_t size){
-    uint32_t closest_order;
+BAD_RTOS_STATIC void* __kernel_alloc(u32 size)
+{
+    u32 closest_order;
     closest_order = 32 -__builtin_clz(size) - !(size & (size-1));
-    if(closest_order < kernel_buddy.min_order){
+    
+    if(closest_order < kernel_buddy.min_order)
+    {
         closest_order = kernel_buddy.min_order;
     }
+    
     return __buddy_alloc(&kernel_buddy,closest_order );
 }
 
-BAD_RTOS_STATIC void __kernel_free(void *block,uint32_t size){
-    uint32_t closest_order;
+BAD_RTOS_STATIC void __kernel_free(void *block,u32 size)
+{
+    u32 closest_order;
     closest_order = 32 -__builtin_clz(size) - !(size & (size-1));
-    if(closest_order < kernel_buddy.min_order){
+    
+    if(closest_order < kernel_buddy.min_order)
+    {
         closest_order = kernel_buddy.min_order;
     }
-    __buddy_free(&kernel_buddy,block,closest_order );
     
+    __buddy_free(&kernel_buddy,block,closest_order );
 }
 #endif
 
-BAD_RTOS_STATIC void __tcb_queue_slab_init(){
+BAD_RTOS_STATIC void __tcb_queue_slab_init()
+{
 #if BAD_RTOS_MAX_TASKS < 32
-    tcbslab.free_bitmask = (1UL<<(BAD_RTOS_MAX_TASKS))-1;
+    tcbslab.free_bitmask = (1UL << (BAD_RTOS_MAX_TASKS)) - 1;
 #else
     tcbslab.free_bitmask = UINT32_MAX;
 #endif
 }
 
-BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_alloc(){
-    if(tcbslab.free_bitmask == 0){
+BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_alloc()
+{
+    if(tcbslab.free_bitmask == 0)
+    {
         return 0; 
     }
-    uint8_t block_idx = __builtin_ctz(tcbslab.free_bitmask);
-    tcbslab.free_bitmask &= ~(1UL<<block_idx);
+    
+    u8 block_idx = __builtin_ctz(tcbslab.free_bitmask);
+    tcbslab.free_bitmask &= ~(1UL << block_idx);
+    
     return tcbslab.node_arr + block_idx;
 }
 
-BAD_RTOS_STATIC uint8_t __tcb_slab_get_idx_from_ptr(bad_tcb_t *block){
-    if(tcbslab.node_arr > block || tcbslab.node_arr + BAD_RTOS_MAX_TASKS < block){
+BAD_RTOS_STATIC u8 __tcb_slab_get_idx_from_ptr(bad_tcb_t *block)
+{
+    if(tcbslab.node_arr > block || tcbslab.node_arr + BAD_RTOS_MAX_TASKS < block)
+    {
         return 0xFF;
     }
+    
     return block - tcbslab.node_arr;
 }
 
-BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(uint8_t idx){
-    if(idx >= BAD_RTOS_MAX_TASKS){
+BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(u8 idx)
+{
+    if(idx >= BAD_RTOS_MAX_TASKS)
+    {
         return 0;
     }
+    
     return tcbslab.node_arr+idx;
 }
 
-BAD_RTOS_STATIC void __tcb_slab_free(bad_tcb_t *tcb){
-    uint8_t block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
-    if(block_idx >= BAD_RTOS_MAX_TASKS){
+BAD_RTOS_STATIC void __tcb_slab_free(bad_tcb_t *tcb)
+{
+    u8 block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
+    
+    if(block_idx >= BAD_RTOS_MAX_TASKS)
+    {
         return;
     }
-    tcbslab.free_bitmask |= (1ULL<<block_idx); 
+    
+    tcbslab.free_bitmask |= (1ULL << block_idx); 
 }
 
-BAD_RTOS_STATIC void *__obj_list_pull_atomic(volatile void* list){
-    uint32_t *head;
-    do{
-        
-        head = (uint32_t *)__ldrex(list);
+BAD_RTOS_STATIC void *__obj_list_pull_atomic(volatile void* list)
+{
+    u32 *head;
+    
+    do
+    {
+        head = (u32 *)__ldrex(list);
         if(!head){
             __clrex();
             return 0;
         }
-    }while(__strex(*head, (volatile uint32_t *)list));
+    }while(__strex(*head, (volatile u32 *)list));
     return head;   
 }
 
-BAD_RTOS_STATIC void __obj_list_push_atomic(volatile void *list,void *obj){
-    uint32_t *new_head = obj;
-    do{
+BAD_RTOS_STATIC void __obj_list_push_atomic(volatile void *list,void *obj)
+{
+    u32 *new_head = obj;
+    
+    do
+    {
         *new_head = __ldrex(list);
-    }while(__strex((uint32_t)new_head, (volatile uint32_t *)list));
+    }
+    while(__strex((u32)new_head, (volatile u32 *)list));
 }
 
-bad_rtos_status_t pool_init(bad_pool_t *pool,void *mem,uint32_t block_size,uint32_t size_in_bytes){
-    if(!pool || !mem || !block_size ||!size_in_bytes || size_in_bytes % block_size){
+bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes){
+    if(!pool || !mem || !block_size ||!size_in_bytes || size_in_bytes % block_size)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
+    
     pool->mem = mem;
     pool->block_size = block_size;
     BAD_OPT_BARRIER;
@@ -1917,27 +2137,39 @@ bad_rtos_status_t pool_init(bad_pool_t *pool,void *mem,uint32_t block_size,uint3
     return BAD_RTOS_STATUS_OK;
 }
 
-void* pool_alloc(bad_pool_t *pool){
+void* pool_alloc(bad_pool_t *pool)
+{
     void *res =__obj_list_pull_atomic(&pool->next);
-    if(res){
+    if(res)
+    {
         return res;
     }
-    uint32_t curr;
-    do{
+    
+    u32 curr;
+    do
+    {
         curr = __ldrex(&pool->curr);
-        if(curr >= pool->size_in_bytes){
+        
+        if(curr >= pool->size_in_bytes)
+        {
             return 0;
         }
         
-    }while(__strex(curr+pool->block_size,&pool->curr));
+    }
+    while(__strex(curr+pool->block_size,&pool->curr));
+    
     return pool->mem + curr;
 }
 
-void pool_free(bad_pool_t *pool,void *obj){
-    uint8_t *cmp_ptr = obj;
-    if(pool->mem > cmp_ptr || pool->mem + pool->size_in_bytes <= cmp_ptr){  
+void pool_free(bad_pool_t *pool,void *obj)
+{
+    u8 *cmp_ptr = obj;
+    
+    if(pool->mem > cmp_ptr || pool->mem + pool->size_in_bytes <= cmp_ptr)
+    {
         __builtin_trap();
     }
+    
     __obj_list_push_atomic(pool,obj);
 }
 
@@ -1951,179 +2183,230 @@ void gpool_free(void *obj){
 
 //Scheduling helpers
 
-BAD_RTOS_STATIC void __prio_list_enqueue(bad_link_node_t *q,bad_tcb_t *tcb, bad_rtos_misc_t target){
-    
+BAD_RTOS_STATIC void __prio_list_enqueue(bad_link_node_t *q,bad_tcb_t *tcb, bad_rtos_misc_t target)
+{
     bad_link_node_t *traverse = q->next;
     bad_link_node_t *prev = q;
+    
     bad_tcb_t *tcb_to_compare = BAD_CONTAINER_OF(traverse,bad_tcb_t,qnode);
-    while (traverse && tcb_to_compare->raised_priority <= tcb->raised_priority) {
+    
+    while (traverse && tcb_to_compare->raised_priority <= tcb->raised_priority)
+    {
         prev = traverse;
         traverse = traverse->next;
         tcb_to_compare = BAD_CONTAINER_OF(traverse,bad_tcb_t,qnode);
     }
+    
     bad_link_node_t *tcb_qnode_ptr = &tcb->qnode; 
     tcb_qnode_ptr->next = traverse;
     tcb_qnode_ptr->prev = prev;
     tcb->misc = target;
-    if(traverse){
+    
+    if(traverse)
+    {
         traverse->prev = tcb_qnode_ptr;
     }
+    
     tcb_qnode_ptr->prev->next = tcb_qnode_ptr;
 }
 
-BAD_RTOS_STATIC void __readyq_enqueue(bad_tcb_t *tcb){
+BAD_RTOS_STATIC void __readyq_enqueue(bad_tcb_t *tcb)
+{
     bad_link_node_t *head =  &kernel_cb.readyq[tcb->raised_priority];
     bad_link_node_t *tcb_qnode_ptr = &tcb->qnode;
+    
     tcb_qnode_ptr->prev = head->prev;
     tcb_qnode_ptr->next = head;
     tcb_qnode_ptr->prev->next = tcb_qnode_ptr;
+    
     head->prev = tcb_qnode_ptr;
     kernel_cb.ready_bmask |= 1 << tcb->raised_priority;
     tcb->misc = BAD_RTOS_MISC_READYQ_MEMBER;
 }
 
-BAD_RTOS_STATIC uint32_t __get_top_ready_prio(){
+BAD_RTOS_STATIC u32 __get_top_ready_prio()
+{
     return __builtin_ctz(kernel_cb.ready_bmask);
 }
 
-BAD_RTOS_STATIC bad_tcb_t *__readyq_dequeue_head(){
-    uint32_t top = __get_top_ready_prio();
+BAD_RTOS_STATIC bad_tcb_t *__readyq_dequeue_head()
+{
+    u32 top = __get_top_ready_prio();
     bad_link_node_t *tcb_qnode_ptr = kernel_cb.readyq[top].next;
     bad_tcb_t *tcb = BAD_CONTAINER_OF(tcb_qnode_ptr, bad_tcb_t, qnode);
+    
     tcb_qnode_ptr->next->prev = tcb_qnode_ptr->prev;
     tcb_qnode_ptr->prev->next = tcb_qnode_ptr->next;
     tcb_qnode_ptr->next = 0;
     tcb_qnode_ptr->prev = 0;
+    
     kernel_cb.ready_bmask ^= (kernel_cb.readyq[top].next ==  &kernel_cb.readyq[top]) << top;
     return tcb;
 }
 
-BAD_RTOS_STATIC void __delayq_enqueue(bad_tcb_t *tcb, uint32_t absolute){
-    
+BAD_RTOS_STATIC void __delayq_enqueue(bad_tcb_t *tcb, u32 absolute)
+{
     bad_link_node_t *traverse = kernel_cb.delayq.next;
     bad_link_node_t *prev = &kernel_cb.delayq;
     bad_tcb_t *traverse_tcb = BAD_CONTAINER_OF(traverse,bad_tcb_t,delaynode);
-    uint32_t compound = 0;
+    u32 compound = 0;
     
-    while (traverse && (compound+=traverse_tcb->counter) <= absolute) {
+    while (traverse && (compound+=traverse_tcb->counter) <= absolute)
+    {
         prev = traverse;
         traverse = traverse->next;
         traverse_tcb = BAD_CONTAINER_OF(traverse,bad_tcb_t,delaynode);
     }
-    
     
     bad_link_node_t *tcb_delaynode_ptr = &tcb->delaynode;
     
     tcb_delaynode_ptr->next = traverse;
     tcb_delaynode_ptr->prev = prev;
     tcb->delayq_misc = BAD_RTOS_MISC_DELAYQ_MEMBER;
-    if(traverse){
+    
+    if(traverse)
+    {
         traverse->prev = tcb_delaynode_ptr;
         compound -= traverse_tcb->counter;
         traverse_tcb->counter -= absolute - compound;
     }
+    
     tcb->counter = absolute - compound;
     tcb_delaynode_ptr->prev->next = tcb_delaynode_ptr;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __delayq_dequeue(bad_tcb_t *tcb){
-    
-    if(tcb->delayq_misc == BAD_RTOS_MISC_NOT_DELAYED){
+BAD_RTOS_STATIC bad_rtos_status_t __delayq_dequeue(bad_tcb_t *tcb)
+{
+    if(tcb->delayq_misc == BAD_RTOS_MISC_NOT_DELAYED)
+    {
         return BAD_RTOS_STATUS_WRONG_Q;
     }
     
     bad_link_node_t *tcb_delaynode_ptr = &tcb->delaynode;
     tcb_delaynode_ptr->prev->next = tcb_delaynode_ptr->next;
-    if(tcb_delaynode_ptr->next){
+    
+    if(tcb_delaynode_ptr->next)
+    {
         bad_tcb_t *next_tcb = BAD_CONTAINER_OF(tcb_delaynode_ptr->next,bad_tcb_t,delaynode);
         next_tcb->counter+=tcb->counter;
         tcb_delaynode_ptr->next->prev = tcb_delaynode_ptr->prev;
     }
+    
     tcb_delaynode_ptr->next = 0;
     tcb_delaynode_ptr->prev = 0;
     tcb->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED;
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_tcb_t* __prio_list_dequeue_head(bad_link_node_t *q){
+BAD_RTOS_STATIC bad_tcb_t* __prio_list_dequeue_head(bad_link_node_t *q)
+{
     bad_link_node_t *head = q->next;
-    if(!head){
+    
+    if(!head)
+    {
         return 0;
     }
+    
     bad_link_node_t *new_head = head->next; 
     q->next = new_head;
-    if(new_head){
+    
+    if(new_head)
+    {
         new_head->prev = q;
     }
+    
     return BAD_CONTAINER_OF(head,bad_tcb_t,qnode);
 }
 
-BAD_RTOS_STATIC bad_tcb_t* __delayq_dequeue_head(){
+BAD_RTOS_STATIC bad_tcb_t* __delayq_dequeue_head()
+{
     bad_link_node_t *head = kernel_cb.delayq.next;
-    if(!head){
+    
+    if(!head)
+    {
         return 0;
     }
     bad_link_node_t *new_head = head->next; 
     kernel_cb.delayq.next = new_head;
-    if(new_head){
+    
+    if(new_head)
+    {
         new_head->prev = &kernel_cb.delayq;
     }
+    
     bad_tcb_t *head_tcb = BAD_CONTAINER_OF(head,bad_tcb_t,delaynode);
     head_tcb->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED; 
+    
     return head_tcb;
 }
 
-BAD_RTOS_STATIC void __enqueue_head(bad_link_node_t *q, bad_tcb_t *tcb, bad_rtos_misc_t target){
+BAD_RTOS_STATIC void __enqueue_head(bad_link_node_t *q, bad_tcb_t *tcb, bad_rtos_misc_t target)
+{
     bad_link_node_t * old_head = q->next;
     bad_link_node_t *tcb_qnode_ptr = &tcb->qnode;
-    if(old_head){ 
+    
+    if(old_head)
+    {
         old_head->prev = tcb_qnode_ptr;
     }
+    
     tcb_qnode_ptr->next = old_head;
     tcb_qnode_ptr->prev = q;
     tcb->misc = target;
     q->next = tcb_qnode_ptr;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t *tcb,bad_rtos_misc_t target){
-    if(tcb->misc != target){
+BAD_RTOS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t *tcb,bad_rtos_misc_t target)
+{
+    if(tcb->misc != target)
+    {
         return BAD_RTOS_STATUS_WRONG_Q;
     }
     
     bad_link_node_t *tcb_qnode_ptr = &tcb->qnode;
     tcb_qnode_ptr->prev->next = tcb_qnode_ptr->next;
-    if(tcb_qnode_ptr->next){
+    
+    if(tcb_qnode_ptr->next)
+    {
         tcb_qnode_ptr->next->prev = tcb_qnode_ptr->prev;
     }
     
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC void __isr_q_push(bad_isr_q_t *q,bad_isr_op_obj_t* msg){
-    bad_isr_op_obj_t *tail ;
+BAD_RTOS_STATIC void __isr_q_push(bad_isr_q_t *q,bad_isr_op_obj_t* msg)
+{
+    bad_isr_op_obj_t *tail;
+    
 #ifdef BAD_RTOS_USE_MPU
-    uint32_t kernel_rlar = BAD_MPU->RLAR;
-    BAD_MPU->RLAR = kernel_rlar & ~(BAD_MPU_RLAR_EN);
-    __dsb();
-    __isb();
+    u32 key = __mpu_kernel_region_save_unlock();
 #endif
+    
     msg->next = 0;
-    do{
-        tail = (bad_isr_op_obj_t *)__ldrex((volatile uint32_t*)&q->head);
-    }while(__strex((uint32_t)msg,(volatile uint32_t *)&q->head));
+    
+    do
+    {
+        tail = (bad_isr_op_obj_t *)__ldrex((volatile u32*)&q->head);
+    }
+    while(__strex((u32)msg,(volatile u32 *)&q->head));
+    
     tail->next = msg;
+    
     __dmb();
 #ifdef BAD_RTOS_USE_MPU
-    BAD_MPU->RLAR = kernel_rlar;
-    __dsb();
+    __mpu_kernel_region_restore_lock(key);
 #endif
 }
 
-BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q){
+BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q)
+{
     bad_isr_op_obj_t *next =q->tail->next;
     bad_isr_op_obj_t *tail = q->tail;
-    if(q->tail == &q->stub){
-        if(!next){
+    
+    if(q->tail == &q->stub)
+    {
+        if(!next)
+        {
             return 0;
         }
         q->tail = next;
@@ -2131,28 +2414,35 @@ BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q){
         next = next->next;
     }
     
-    if(next){
+    if(next)
+    {
         q->tail = next;
         return tail;
     }
     
-    if(q->head != tail){
+    if(q->head != tail)
+    {
         return 0; //not possible in the current usecase but nice to have
     }
     
     __isr_q_push(q,&q->stub);
     next = tail->next;
-    if(!next){
+    
+    if(!next)
+    {
         return 0;//not possible in the current usecase but nice to have
     }
+    
     q->tail = next;
     return tail;
-    
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __kernel_notify(bad_isr_op_t op,void *arg){
+BAD_RTOS_STATIC bad_rtos_status_t __kernel_notify(bad_isr_op_t op,void *arg)
+{
     bad_isr_op_obj_t *message = gpool_alloc();
-    if(!message){
+    
+    if(!message)
+    {
         return BAD_RTOS_STATUS_ALLOC_FAIL;
     }
     message->op_kind = op;
@@ -2160,41 +2450,55 @@ BAD_RTOS_STATIC bad_rtos_status_t __kernel_notify(bad_isr_op_t op,void *arg){
     __dmb();
     __isr_q_push(&kernel_cb.isrq,message);
     __scb_trigger_pendsv();
+    
     return BAD_RTOS_STATUS_OK; 
 }
 
-BAD_RTOS_STATIC void __sched_update(bad_tcb_t *tcb){
+BAD_RTOS_STATIC void __sched_update(bad_tcb_t *tcb)
+{
     kernel_cb.next = tcb;
     tcb->misc = BAD_RTOS_MISC_RUNNING;
 }
 
-BAD_RTOS_STATIC void __sched_try_update(){
-    uint32_t top_ready_prio = __get_top_ready_prio();
-    if(top_ready_prio < kernel_cb.curr->raised_priority && kernel_cb.is_unlocked){
+BAD_RTOS_STATIC void __sched_try_update()
+{
+    u32 top_ready_prio = __get_top_ready_prio();
+    
+    if(top_ready_prio < kernel_cb.curr->raised_priority && kernel_cb.is_unlocked)
+    {
         __readyq_enqueue(kernel_cb.curr);
         __sched_update(__readyq_dequeue_head());
     }
 }
 
-BAD_RTOS_STATIC void __sched_try_preempt(bad_tcb_t *tcb){
-    
-    if(tcb->raised_priority < kernel_cb.curr->raised_priority && kernel_cb.is_unlocked){
+BAD_RTOS_STATIC void __sched_try_preempt(bad_tcb_t *tcb)
+{
+    if(tcb->raised_priority < kernel_cb.curr->raised_priority && kernel_cb.is_unlocked)
+    {
         __readyq_enqueue(kernel_cb.curr);
         __sched_update(tcb);
-    }else {
+    }
+    else
+    {
         __readyq_enqueue(tcb);
     }
-    
 }
 
-static void __attribute__((used)) __handle_systick_event(bad_systick_status_t status){
-    if(status > 1){
-        do{ 
+static void __attribute__((used)) __handle_systick_event(bad_systick_status_t status)
+{
+    if(status > 1)
+    {
+        do
+        { 
             bad_tcb_t *wake = __delayq_dequeue_head();
             
-            if(wake->cbptr){
-                bad_task_handle_t wake_handle = __tcb_slab_get_idx_from_ptr(wake) | 
-                    BAD_TASK_HANDLE_GEN(wake->generation);
+            if(wake->cbptr)
+            {
+                bad_task_handle_t wake_handle = {
+                    .idx = __tcb_slab_get_idx_from_ptr(wake),
+                    .gen = wake->generation
+                };
+                
                 wake->cbptr(wake_handle,wake->args);
                 wake->cbptr = 0;
                 wake->args = 0;
@@ -2202,93 +2506,115 @@ static void __attribute__((used)) __handle_systick_event(bad_systick_status_t st
             
             wake->counter = wake->ticks_to_change;
             __readyq_enqueue(wake);
-        }while(kernel_cb.delayq.next && !BAD_CONTAINER_OF(kernel_cb.delayq.next, bad_tcb_t, delaynode)->counter);
+        }
+        while(kernel_cb.delayq.next && !BAD_CONTAINER_OF(kernel_cb.delayq.next, bad_tcb_t, delaynode)->counter);
         
     }
-    if (status & BAD_SYSTICK_TIMEFRAME_PENDING) {
+    
+    if (status & BAD_SYSTICK_TIMEFRAME_PENDING)
+    {
         kernel_cb.curr->counter = kernel_cb.curr->ticks_to_change;
     }    
     
-    uint32_t top_ready_prio = __get_top_ready_prio(); 
+    u32 top_ready_prio = __get_top_ready_prio(); 
     
     if(kernel_cb.ready_bmask && kernel_cb.is_unlocked && 
        top_ready_prio + (status == BAD_SYSTICK_DELAY_WAKE_PENDING)
-       <= kernel_cb.curr->raised_priority ){
+       <= kernel_cb.curr->raised_priority )
+    {
         __readyq_enqueue(kernel_cb.curr);
         __sched_update(__readyq_dequeue_head());
     }
 }
 
-BAD_RTOS_STATIC uint32_t * __init_stack(taskptr task, uint32_t *stacktop,void *args){
+BAD_RTOS_STATIC u32 * __init_stack(taskptr task, u32 *stacktop,void *args)
+{
     *--stacktop = 0x01000000UL;     // xPSR (Thumb bit set)
-    *--stacktop = (uint32_t)task|0x1;   // PC
+    *--stacktop = (u32)task|0x1;   // PC
     *--stacktop = 0x0;     
     *--stacktop = 0x12121212UL;     // R12
     *--stacktop = 0x03030303UL;     // R3
     *--stacktop = 0x02020202UL;     // R2
     *--stacktop = 0x01010101UL;     // R1
-    *--stacktop = (uint32_t)args;     // R0 (parameter, optional)
+    *--stacktop = (u32)args;     // R0 (parameter, optional)
     *--stacktop = 0xFFFFFFFDUL;  //lr pushed to track fpu state (thread mode + PSP + No FPU)
-    for(uint8_t i = 0;i < 8;i++){
+    for(u8 i = 0;i < 8;i++)
+    {
         *--stacktop = 0xDEADBEEFUL;
     }
     return stacktop;
 }
 
 //Core isr api implementations
-bad_rtos_status_t task_unblock_from_isr(bad_task_handle_t handle){
-    if(!__get_ipsr()){
+bad_rtos_status_t task_unblock_from_isr(bad_task_handle_t handle)
+{
+    if(!__get_ipsr())
+    {
         return BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
-    if(!handle || !tcb || tcb->generation != BAD_TASK_HANDLE_GET_GEN(handle)){
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
+    {
         return BAD_RTOS_STATUS_HANDLE_INVALID;
     }
     
-    return __kernel_notify(BAD_ISR_OP_TASK_UNBLOCK,(void*)handle);
+    return __kernel_notify(BAD_ISR_OP_TASK_UNBLOCK,(void*)handle.val);
 }
 
-bad_rtos_status_t task_delay_cancel_from_isr(bad_task_handle_t handle){
-    if(!__get_ipsr()){
+bad_rtos_status_t task_delay_cancel_from_isr(bad_task_handle_t handle)
+{
+    if(!__get_ipsr())
+    {
         return BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
-    if(!handle || !tcb || tcb->generation != BAD_TASK_HANDLE_GET_GEN(handle)){
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
+    {
         return BAD_RTOS_STATUS_HANDLE_INVALID;
     }
     
-    return __kernel_notify(BAD_ISR_OP_TASK_DELAY_CANCEL,(void*)handle);
+    return __kernel_notify(BAD_ISR_OP_TASK_DELAY_CANCEL,(void*)handle.val);
 }
 
 //Core api implenetations
-BAD_RTOS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
-    bad_rtos_status_t status = BAD_RTOS_STATUS_BAD_PARAMETERS;
+BAD_RTOS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args)
+{
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     bad_tcb_t *new_task = 0;
     
-    if(args->stack_size < 64 || args->stack_size % 32 || args->base_priority >= IDLE_TASK_PRIO){
+    if(args->stack_size < 64 || args->stack_size % 32 || args->base_priority >= IDLE_TASK_PRIO)
+    {
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
         goto exit_error;
     }
     
     new_task = __tcb_slab_alloc();
-    if(!new_task){
-        status = BAD_RTOS_STATUS_ALLOC_FAIL;
+    if(!new_task)
+    {
+        ret = BAD_RTOS_STATUS_ALLOC_FAIL;
         goto exit_error;
     }
     
 #ifdef BAD_RTOS_USE_MSGQ
-    if(args->assigned_msgq){
-        if(args->assigned_msgq->owner){
-            status = BAD_RTOS_STATUS_ALREADY_BOUND;
+    if(args->assigned_msgq)
+    {
+        if(args->assigned_msgq->owner)
+        {
+            ret = BAD_RTOS_STATUS_ALREADY_BOUND;
             goto err_free_tcb;
         }
-        if(!args->assigned_msgq->capacity){
+        
+        if(!args->assigned_msgq->capacity_mask)
+        {
             goto err_free_tcb;
         }
         new_task->msgq_owner = 1;
         args->assigned_msgq->owner = new_task;
-    }else{
+    }
+    else
+    {
         new_task->msgq_owner = 0;
     }
 #endif
@@ -2296,14 +2622,17 @@ BAD_RTOS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
     new_task->stack_size = args->stack_size;
     new_task->dyn_stack = 0;
     
-    if(args->stack){
+    if(args->stack)
+    {
         new_task->stack = args->stack;
         new_task->dyn_stack = 0;
-    }else{
+    }
+    else
+    {
 #if defined(BAD_RTOS_USE_KHEAP)
         new_task->stack = __kernel_alloc(args->stack_size);
         if(!new_task->stack){
-            status = BAD_RTOS_STATUS_ALLOC_FAIL;
+            ret = BAD_RTOS_STATUS_ALLOC_FAIL;
             goto err_release_msgq;
         }
         new_task->dyn_stack = 1;
@@ -2313,11 +2642,9 @@ BAD_RTOS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
     }
     
 #ifdef BAD_RTOS_USE_MPU
-    if(args->regions){
-        new_task->regions = args->regions;
-    }else{
-        new_task->regions = zeroed_regions;
-    }
+    ret = __mpu_translate_settings(new_task,args);
+    if(ret != BAD_RTOS_STATUS_OK)
+        goto err_free_stack;
 #endif
     
     new_task->entry = args->entry;
@@ -2326,167 +2653,217 @@ BAD_RTOS_STATIC bad_task_handle_t __task_make(bad_task_descr_t *args){
     new_task->ticks_to_change = args->ticks_to_change;
     new_task->counter = args->ticks_to_change;
     
-    uint32_t *stack_top = (uint32_t *)(new_task->stack + args->stack_size);
+    u32 *stack_top = (u32 *)(new_task->stack + args->stack_size);
     new_task->sp = __init_stack(new_task->entry, stack_top, args->args);
     
-    if(kernel_cb.is_running){
+    if(kernel_cb.is_running)
+    {
         __sched_try_preempt(new_task);
-    }else{
+    }
+    else
+    {
         __readyq_enqueue(new_task);
     }
     
-    uint8_t idx = __tcb_slab_get_idx_from_ptr(new_task);
-    return (bad_task_handle_t)(idx | (new_task->generation << 16));
+    u8 idx = __tcb_slab_get_idx_from_ptr(new_task);
+    return (bad_task_handle_t){.idx = idx, .gen = new_task->generation };
+    
+    err_free_stack:
+    __kernel_free(new_task->stack,args->stack_size);
     
     err_release_msgq:
 #ifdef BAD_RTOS_USE_MSGQ
-    if(args->assigned_msgq){
+    if(args->assigned_msgq)
+    {
         args->assigned_msgq->owner = 0;
     }
 #endif
+    
     err_free_tcb:
     __tcb_slab_free(new_task);
+    
     exit_error:
-    return BAD_TASK_HANDLE_INVALID_HANDLE(status);
+    return __TASK_HANDLE_INVALID_HANDLE(ret);
 }
 
-BAD_RTOS_STATIC void  __task_block(){
+BAD_RTOS_STATIC void  __task_block()
+{
     __enqueue_head(&kernel_cb.blockedq, kernel_cb.curr,BAD_RTOS_MISC_BLOCKEDQ_MEMBER);
     __sched_update(__readyq_dequeue_head());
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle){
+BAD_RTOS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle)
+{
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
-    if(!handle||!tcb || tcb->generation != BAD_TASK_HANDLE_GET_GEN(handle)){
+    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
+    {
         return BAD_RTOS_STATUS_HANDLE_INVALID;
     }
-    if(__remove_entry(tcb, BAD_RTOS_MISC_BLOCKEDQ_MEMBER)!= BAD_RTOS_STATUS_OK){
+    
+    if(__remove_entry(tcb, BAD_RTOS_MISC_BLOCKEDQ_MEMBER) != BAD_RTOS_STATUS_OK)
+    {
         return BAD_RTOS_STATUS_NOT_BLOCKED;
     }
+    
     __sched_try_preempt(tcb);
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle){
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
-    if(!handle ||!tcb || tcb->generation != BAD_TASK_HANDLE_GET_GEN(handle)){
+BAD_RTOS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle)
+{
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+    
+    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
+    {
         return BAD_RTOS_STATUS_HANDLE_INVALID;
     }
     
-    if(__delayq_dequeue(tcb)!= BAD_RTOS_STATUS_OK){
+    if(__delayq_dequeue(tcb)!= BAD_RTOS_STATUS_OK)
+    {
         return BAD_RTOS_STATUS_NOT_DELAYED;
     }
     
     tcb->cbptr = 0;
     tcb->args = 0;
     *(tcb->sp+9) = BAD_RTOS_STATUS_WOKEN;
+    
     __sched_try_preempt(tcb);
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __task_yield(){
-    uint32_t top_ready_prio = __get_top_ready_prio();
-    if(top_ready_prio == kernel_cb.curr->raised_priority && kernel_cb.is_unlocked){
+BAD_RTOS_STATIC bad_rtos_status_t __task_yield()
+{
+    u32 top_ready_prio = __get_top_ready_prio();
+    
+    if(top_ready_prio == kernel_cb.curr->raised_priority && kernel_cb.is_unlocked)
+    {
         __readyq_enqueue(kernel_cb.curr);
         __sched_update(__readyq_dequeue_head());
         return BAD_RTOS_STATUS_OK;
     }
-    else{
+    else
+    {
         return BAD_RTOS_STATUS_CANT_YIELD;
     }
 }
 
-BAD_RTOS_STATIC void __task_finish(){
+BAD_RTOS_STATIC void __task_finish()
+{
 #ifdef BAD_RTOS_USE_MUTEX
-    if(kernel_cb.curr->mutex_count){ //trap when task want to finish without releasing mutexes
+    if(kernel_cb.curr->mutex_count) //trap when task want to finish without releasing mutexes
+    {
         __builtin_trap();
         return;
     }
 #endif 
+    
 #ifdef BAD_RTOS_USE_MSGQ
-    if(kernel_cb.curr->msgq_owner){
+    if(kernel_cb.curr->msgq_owner)
+    {
         __builtin_trap();
         return;
     }
 #endif
+    
 #if defined (BAD_RTOS_USE_KHEAP)
-    if(kernel_cb.curr->dyn_stack){ //free the dynamically allocated stack 
+    if(kernel_cb.curr->dyn_stack) //free the dynamically allocated stack 
+    {
         __kernel_free((void*)kernel_cb.curr->stack,kernel_cb.curr->stack_size);
     }
 #endif
+    
     __sched_update(__readyq_dequeue_head());
     kernel_cb.curr->generation++;
-    __tcb_slab_free(kernel_cb.curr);//free the the tcb used by task
+    __tcb_slab_free(kernel_cb.curr); //free the the tcb used by task
 }
 
-BAD_RTOS_STATIC void __task_delay(uint32_t delay,cbptr cb, void* args){
+BAD_RTOS_STATIC void __task_delay(u32 delay,cbptr cb, void* args)
+{
     kernel_cb.curr->cbptr =cb;
     kernel_cb.curr->args = args;
+    
     __delayq_enqueue(kernel_cb.curr,delay);
     __sched_update(__readyq_dequeue_head());
-    
 }
 
-BAD_RTOS_STATIC void __kernel_start(){
-    if(kernel_cb.is_running){
+BAD_RTOS_STATIC void __kernel_start()
+{
+    if(kernel_cb.is_running)
+    {
         __builtin_trap();
     }
+    
     kernel_cb.is_running = 1;
     kernel_cb.is_unlocked = 1;
     pool_init(&gpool,gpool_mem,sizeof(bad_isr_op_obj_t),sizeof(bad_isr_op_obj_t) * BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES);
+    
     __set_control(0x1);
     __restore_basepri(0);
+    
     __scb_set_core_interrupt_priority(BAD_SCB_SVC_INTR, BAD_SCB_LOWEST_PRIO);
+    
     kernel_cb.curr = __readyq_dequeue_head();
-    __asm volatile("b __init_second_stage");
+    
+    __asm__ volatile("b __init_second_stage");
 }
 
-BAD_RTOS_STATIC uint32_t __sched_lock(){
-    uint32_t lock = kernel_cb.is_unlocked;
+BAD_RTOS_STATIC u32 __sched_lock()
+{
+    u32 lock = kernel_cb.is_unlocked;
     kernel_cb.is_unlocked = 0;
     return lock;
 }
 
-BAD_RTOS_STATIC void __sched_unlock(uint32_t key){
+BAD_RTOS_STATIC void __sched_unlock(u32 key)
+{
     kernel_cb.is_unlocked = key;
     __sched_try_update();
 }
 
 // Startup code
-BAD_RTOS_STATIC void __kernel_sections_init(){
-    uint32_t *src = (uint32_t *)&__kernel_bss;
-    uint32_t *end = (uint32_t *)&__ekernel_bss;
-    while (src < end) {
+BAD_RTOS_STATIC void __kernel_sections_init()
+{
+    u32 *src = (u32 *)&__kernel_bss;
+    u32 *end = (u32 *)&__ekernel_bss;
+    
+    while (src < end)
+    {
         *src++ = 0; 
     }
     
-    src = (uint32_t *)&__rkernel_data;
-    uint32_t *dest = (uint32_t *)&__kernel_data;
-    end = (uint32_t *)&__ekernel_data;
-    while (dest<end) {
+    src = (u32 *)&__rkernel_data;
+    u32 *dest = (u32 *)&__kernel_data;
+    end = (u32 *)&__ekernel_data;
+    
+    while (dest < end)
+    {
         *dest++ = *src++;
     }
 }
 
-BAD_RTOS_STATIC void __interrupt_init(){
+BAD_RTOS_STATIC void __interrupt_init()
+{
     __scb_set_core_interrupt_priority(BAD_SCB_SVC_INTR, BAD_SCB_PRIO0);
     __scb_set_core_interrupt_priority(BAD_SCB_PENDSV_INTR, BAD_SCB_LOWEST_PRIO);
 }
 
-BAD_RTOS_STATIC void __readyq_init(){
-    for (uint32_t i = 0; i < BAD_RTOS_PRIO_COUNT; i++){
+BAD_RTOS_STATIC void __readyq_init()
+{
+    for (u32 i = 0; i < BAD_RTOS_PRIO_COUNT; i++){
         kernel_cb.readyq[i].next = &kernel_cb.readyq[i];
         kernel_cb.readyq[i].prev = &kernel_cb.readyq[i];
     }
 }
 
-BAD_RTOS_STATIC void __irq_q_init(){
+BAD_RTOS_STATIC void __irq_q_init()
+{
     kernel_cb.isrq.head = &kernel_cb.isrq.stub;
     kernel_cb.isrq.tail = &kernel_cb.isrq.stub;
 }
 
-BAD_RTOS_STATIC void __idle_task_init(){
+BAD_RTOS_STATIC void __idle_task_init()
+{
     bad_tcb_t *idle_tcb = __tcb_slab_alloc(); //always idx 0
     idle_tcb->stack = idle_stack;
     idle_tcb->stack_size = IDLE_TASK_STACK_SIZE;
@@ -2496,16 +2873,17 @@ BAD_RTOS_STATIC void __idle_task_init(){
     idle_tcb->entry = idle_task;
     idle_tcb->counter = UINT32_MAX;
 #ifdef BAD_RTOS_USE_MPU
-    idle_tcb->regions = idle_regions;
+    __mpu_translate_settings(idle_tcb,0);
 #endif
-    idle_tcb->sp = __init_stack(idle_task, (uint32_t *)idle_stack +(IDLE_TASK_STACK_SIZE/sizeof(uint32_t)),0);
+    idle_tcb->sp = __init_stack(idle_task, (u32 *)idle_stack +(IDLE_TASK_STACK_SIZE/sizeof(u32)),0);
     __readyq_enqueue(idle_tcb);
 }
 
 // declaration for user init function
-extern void bad_user_init();
+extern bad_rtos_status_t bad_user_init();
 
-void bad_rtos_start(){
+void bad_rtos_start()
+{
     __restore_basepri(1 << (8 - BAD_RTOS_PRIO_BITS));
     __kernel_sections_init();
     __tcb_queue_slab_init();
@@ -2525,52 +2903,66 @@ void bad_rtos_start(){
 #if defined(BAD_RTOS_USE_FPU) && defined(BAD_RTOS_FPU_DEFAULT_SETTINGS)
     __fpu_init(BAD_RTOS_FPU_SETTINGS);
 #endif
-    bad_user_init();
-    __first_task_start();
     
+    if(bad_user_init() == BAD_RTOS_STATUS_OK)
+        __first_task_start();
 }
 
 //Synchro helpers
 
-BAD_RTOS_STATIC bad_tcb_t* __synchro_wake(bad_link_node_t *q,cbptr cb,bad_rtos_status_t status){
+BAD_RTOS_STATIC bad_tcb_t* __synchro_wake(bad_link_node_t *q,cbptr cb,bad_rtos_status_t status)
+{
     bad_tcb_t *tcb = __prio_list_dequeue_head(q);
-    if(!tcb){
+    if(!tcb)
+    {
         return 0;
     }
-    if(tcb->cbptr == cb){
+    
+    if(tcb->cbptr == cb)
+    {
         __delayq_dequeue(tcb);
         tcb->cbptr = 0;
         tcb->args = 0;
     }
+    
     *(tcb->sp+9) = status;
     __sched_try_preempt(tcb);
     return tcb;
 }
 
-BAD_RTOS_STATIC void __synchro_wake_all(bad_link_node_t *q,cbptr cb, uint32_t status){
+BAD_RTOS_STATIC void __synchro_wake_all(bad_link_node_t *q,cbptr cb, u32 status)
+{
     bad_link_node_t *traverse = q->next;
     bad_tcb_t *traverse_tcb = BAD_CONTAINER_OF(traverse, bad_tcb_t, qnode);
-    while(traverse){
-        *(traverse_tcb->sp+9) = status; 
-        if(traverse_tcb->cbptr == cb){
+    while(traverse)
+    {
+        *(traverse_tcb->sp+9) = status;
+        
+        if(traverse_tcb->cbptr == cb)
+        {
             traverse_tcb->cbptr = 0;
             traverse_tcb->args = 0;
             __delayq_dequeue(traverse_tcb);
         }
+        
         traverse = traverse->next;
         __readyq_enqueue(traverse_tcb);
         traverse_tcb = BAD_CONTAINER_OF(traverse, bad_tcb_t, qnode);
     }
+    
     *q = (bad_link_node_t){0};
     __sched_try_update();
 }
 
-BAD_RTOS_STATIC  bad_rtos_status_t __synchro_block(bad_link_node_t *q, cbptr cb, uint32_t delay, bad_rtos_misc_t misc){
-    if(delay == UINT32_MAX){
+BAD_RTOS_STATIC  bad_rtos_status_t __synchro_block(bad_link_node_t *q, cbptr cb, u32 delay, bad_rtos_misc_t misc)
+{
+    if(delay == UINT32_MAX)
+    {
         return BAD_RTOS_STATUS_WOULD_BLOCK;
     }
     
-    if(delay){
+    if(delay)
+    {
         kernel_cb.curr->args = q; //every synchro obj has blockedq as first element
         kernel_cb.curr->cbptr = cb;
         __delayq_enqueue( kernel_cb.curr, delay);
@@ -2584,53 +2976,59 @@ BAD_RTOS_STATIC  bad_rtos_status_t __synchro_block(bad_link_node_t *q, cbptr cb,
 // Synchro objects api implenetations
 #ifdef BAD_RTOS_USE_MSGQ
 
-BAD_RTOS_STATIC void __msgq_timeout_cb(bad_task_handle_t handle ,void *msgq){
+BAD_RTOS_STATIC void __msgq_timeout_cb(bad_task_handle_t handle ,void *msgq)
+{
     (void)msgq;
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     __remove_entry(tcb,BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
     *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
 #ifdef BAD_RTOS_USE_KHEAP
 
-BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire_allocate(bad_msgq_t *q,uint32_t capacity){
-    if(!q || (capacity & (capacity - 1))){
+BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire_allocate(bad_msgq_t *q,u32 capacity)
+{
+    if(!q || (capacity & (capacity - 1)))
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(q->owner){
+    if(q->owner)
+    {
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
-    if(kernel_cb.curr->msgq_owner){
-        return BAD_RTOS_STATUS_ALREADY_BOUND;
-    }
-    kernel_cb.curr->msgq_owner = 1;
+    kernel_cb.curr->msgq_owner++;
     q->msgs = __kernel_alloc(capacity);
     q->owner = kernel_cb.curr;
     q->dynamic = 1;
     q->blockedq = (bad_link_node_t){0};
     q->head = q->tail = 0;
     BAD_OPT_BARRIER;
-    q->capacity = capacity;
+    
+    q->capacity_mask = capacity - 1;
     return BAD_RTOS_STATUS_OK;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __msgq_release_deallocate(bad_msgq_t *q){
-    if(!q || !q->dynamic){
+    if(!q || !q->dynamic)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(q->owner != kernel_cb.curr){
+    if(q->owner != kernel_cb.curr)
+    {
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
-    kernel_cb.curr->msgq_owner = 0;
-    uint32_t capacity = q->capacity;
-    q->capacity = 0;
+    kernel_cb.curr->msgq_owner--;
+    u32 capacity = q->capacity_mask + 1;
+    
+    q->capacity_mask = 0;
     BAD_OPT_BARRIER;
     __kernel_free(q->msgs,capacity);
     __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
+    
     *q = (bad_msgq_t){0};
     return BAD_RTOS_STATUS_OK;
 }
@@ -2646,141 +3044,177 @@ BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire(bad_msgq_t *q){
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
-    if(kernel_cb.curr->msgq_owner){
-        return BAD_RTOS_STATUS_ALREADY_BOUND;
-    }
-    
     q->owner = kernel_cb.curr;
-    kernel_cb.curr->msgq_owner = 1;
+    kernel_cb.curr->msgq_owner++;
+    
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __msgq_release(bad_msgq_t *q){
-    if(!q){
+BAD_RTOS_STATIC bad_rtos_status_t __msgq_release(bad_msgq_t *q)
+{
+    if(!q)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(q->owner != kernel_cb.curr){
+    if(q->owner != kernel_cb.curr)
+    {
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
     q->owner = 0;
-    kernel_cb.curr->msgq_owner = 0;
-    volatile uint32_t *atomic_update = (volatile uint32_t *)&q->head; 
+    kernel_cb.curr->msgq_owner--;
+    volatile u32 *atomic_update = (volatile u32 *)&q->head; 
     *atomic_update = 0;
     __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
+    
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t __msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback,uint32_t delay){
-    if(!q || !writeback){
+bad_rtos_status_t __msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback,u32 delay)
+{
+    if(!q || !writeback)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!q->capacity){
+    if(!q->capacity_mask)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
-    if(q->owner != kernel_cb.curr){
+    if(q->owner != kernel_cb.curr)
+    {
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
-    if(q->tail==q->head){
+    if(q->tail == q->head)
+    {
         return __synchro_block(&q->blockedq,__msgq_timeout_cb,delay, BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
     }
     
-    *writeback = *(q->msgs+q->tail);
+    *writeback = *(q->msgs + q->tail);
     BAD_OPT_BARRIER;
     bad_tcb_t *tcb = __synchro_wake(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_OK);
-    if(tcb){
-        uint16_t next_tail = (q->tail+1) & (q->capacity-1);
-        uint16_t next_head = (q->head+1) & (q->capacity-1);
-        uint32_t signal = *(tcb->sp+10);
-        void *args = (void *)*(tcb->sp+11);
+    
+    if(tcb)
+    {
+        u16 next_tail = (q->tail + 1) & q->capacity_mask;
+        u16 next_head = (q->head + 1) & q->capacity_mask;
+        
+        u32 signal = *(tcb->sp + 10);
+        void *args = (void *)*(tcb->sp + 11);
+        
         bad_msg_block_t *block = q->msgs + q->head;
         block->signal = signal;
         block->args = args;
         BAD_OPT_BARRIER;
-        volatile uint32_t *atomic_update = (volatile uint32_t *)&q->head;
+        
+        volatile u32 *atomic_update = (volatile u32 *)&q->head;
         *atomic_update = next_head | (next_tail << 16);
-    }else{
-        q->tail = (q->tail+1) & (q->capacity-1);
+    }
+    else
+    {
+        q->tail = (q->tail + 1) & q->capacity_mask;
     }
     
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC void __msgq_try_wake(bad_msgq_t *q){
+BAD_RTOS_STATIC void __msgq_try_wake(bad_msgq_t *q)
+{
     bad_tcb_t *tcb = __synchro_wake(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_OK);
-    if(tcb){ 
-        bad_msg_block_t *writeback = (bad_msg_block_t *)*(tcb->sp + 10);
+    
+    if(tcb)
+    {
+        bad_msg_block_t *writeback = (bad_msg_block_t *) *(tcb->sp + 10);
         *writeback = *(q->msgs+q->tail);
+        
         BAD_OPT_BARRIER;
-        q->tail = (q->tail+1) & (q->capacity-1);
+        q->tail = (q->tail + 1) & q->capacity_mask;
     }
 }
 
-bad_rtos_status_t __msgq_post_msg(bad_msgq_t *q, uint32_t signal, void *args,uint32_t delay){
-    uint16_t head,next_head;
+bad_rtos_status_t __msgq_post_msg(bad_msgq_t *q, u32 signal, void *args,u32 delay)
+{
+    u16 head,next_head;
     
-    if(!q){
+    if(!q)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!q->capacity){
+    if(!q->capacity_mask)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    do{
-        
+    
+    do
+    {
         head = __ldrexh(&q->head);
-        next_head = (head+1) & (q->capacity-1);
-        if(q->tail == next_head){
+        next_head = (head+1) & q->capacity_mask;
+        
+        if(q->tail == next_head)
+        {
             __clrex();
             return __synchro_block(&q->blockedq,__msgq_timeout_cb,delay, BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
         }
         
-    }while(__strexh(next_head, &q->head)); 
+    }
+    while(__strexh(next_head, &q->head)); 
     
     bad_msg_block_t* block = q->msgs+head;
     
     block->signal = signal;
     block->args = args;
-    if(head == q->tail){
+    
+    if(head == q->tail)
+    {
         __msgq_try_wake(q); 
     }
+    
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, uint32_t signal, void *args){
-    if(!__get_ipsr()){ 
+bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args)
+{
+    if(!__get_ipsr())
+    {
         return BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    if(!q){
+    if(!q)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!q->capacity){
+    if(!q->capacity_mask)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
-    uint32_t head,next_head;
-    do{
-        
+    u32 head,next_head;
+    do
+    {
         head = __ldrexh(&q->head);
-        next_head = (head+1) & (q->capacity-1);
-        if(q->tail == next_head){
+        next_head = (head+1) & q->capacity_mask;
+        
+        if(q->tail == next_head)
+        {
             __clrex();
             return BAD_RTOS_STATUS_WOULD_BLOCK;
         }
         
-    }while(__strexh(next_head, &q->head)); 
+    }
+    while(__strexh(next_head, &q->head)); 
     
-    bad_msg_block_t* block = q->msgs+head;
+    bad_msg_block_t* block = q->msgs + head;
     
     block->signal = signal;
     block->args = args;
-    if(q->tail == head){// we may have preempted the consumer mid block, need to check in pendsv
+    
+    if(q->tail == head) // we may have preempted the consumer mid block, need to check in pendsv
+    {
         return __kernel_notify(BAD_ISR_OP_MSGQ_WAKE,q);
     }
     return BAD_RTOS_STATUS_OK;
@@ -2790,8 +3224,10 @@ bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, uint32_t signal, void *a
 #endif
 
 #ifdef BAD_RTOS_USE_MUTEX
-bad_rtos_status_t mutex_init(bad_mutex_t *mut){
-    if(!mut){
+bad_rtos_status_t mutex_init(bad_mutex_t *mut)
+{
+    if(!mut)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
@@ -2800,26 +3236,32 @@ bad_rtos_status_t mutex_init(bad_mutex_t *mut){
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle ,void *mutex){
+BAD_RTOS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle ,void *mutex)
+{
     (void)mutex;
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     __remove_entry(tcb,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
     *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
-    if(!mut){
+BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut)
+{
+    if(!mut)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(kernel_cb.curr != mut->owner ){
+    
+    if(kernel_cb.curr != mut->owner)
+    {
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
     kernel_cb.curr->mutex_count--;
-    if(!kernel_cb.curr->mutex_count){
+    
+    if(!kernel_cb.curr->mutex_count)
+    {
         kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
     }
-    
     
     __synchro_wake_all(&mut->blockedq,__mutex_timeout_cb,BAD_RTOS_STATUS_DELETED);
     
@@ -2828,29 +3270,37 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut){
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC void __mutex_update_owner_pos(bad_tcb_t *owner){
-    if(owner->misc == BAD_RTOS_MISC_READYQ_MEMBER){
+BAD_RTOS_STATIC void __mutex_update_owner_pos(bad_tcb_t *owner)
+{
+    if(owner->misc == BAD_RTOS_MISC_READYQ_MEMBER)
+    {
         __remove_entry(owner,BAD_RTOS_MISC_READYQ_MEMBER);
         __readyq_enqueue(owner);
     }
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, uint32_t delay){
-    if(!mut){
+BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, u32 delay)
+{
+    if(!mut)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(!mut->owner){
+    
+    if(!mut->owner)
+    {
         mut->owner = kernel_cb.curr;
         kernel_cb.curr->mutex_count++;
         return BAD_RTOS_STATUS_OK;
     }
     
-    if(mut->owner == kernel_cb.curr){
+    if(mut->owner == kernel_cb.curr)
+    {
         mut->rec_takes++;
         return BAD_RTOS_STATUS_OK;
     }
     
-    if(kernel_cb.curr->raised_priority < mut->owner->raised_priority){
+    if(kernel_cb.curr->raised_priority < mut->owner->raised_priority)
+    {
         mut->owner->raised_priority = kernel_cb.curr->raised_priority;
         __mutex_update_owner_pos(mut->owner);
     }
@@ -2858,27 +3308,33 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, uint32_t delay)
     return __synchro_block(&mut->blockedq,__mutex_timeout_cb,delay, BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
 }   
 
-BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
-    if(!mut){
+BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut)
+{
+    if(!mut)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(kernel_cb.curr!= mut->owner){
+    if(kernel_cb.curr!= mut->owner)
+    {
         return BAD_RTOS_STATUS_NOT_OWNER;
     }
     
-    if(mut->rec_takes){
+    if(mut->rec_takes)
+    {
         mut->rec_takes--;
         return BAD_RTOS_STATUS_OK;
     }
     
     mut->owner =  __synchro_wake(&mut->blockedq,__mutex_timeout_cb,BAD_RTOS_STATUS_OK);
     
-    if(!--kernel_cb.curr->mutex_count){
+    if(!--kernel_cb.curr->mutex_count)
+    {
         kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
     }
     
-    if(!mut->owner){ 
+    if(!mut->owner)
+    {
         return BAD_RTOS_STATUS_OK; 
     }
     mut->owner->mutex_count++;    
@@ -2888,33 +3344,41 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut){
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
-bad_rtos_status_t sem_init(bad_sem_t *sem, uint32_t reset_value){
-    if(!sem){
+bad_rtos_status_t sem_init(bad_sem_t *sem, u32 reset_value)
+{
+    if(!sem)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
+    
     sem->blockedq = (bad_link_node_t){0};
     sem->counter = reset_value;
     sem->init_flag = 1;
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore){
+BAD_RTOS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore)
+{
     (void)semaphore;
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     __remove_entry(tcb,BAD_RTOS_MISC_SEM_BLOCKEDQ_MEMBER);
     *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem){
-    if(!sem){
+BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem)
+{
+    if(!sem)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!sem->init_flag){
+    if(!sem->init_flag)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
-    if(!sem->blockedq.next){
+    if(!sem->blockedq.next)
+    {
         return BAD_RTOS_STATUS_OK;
     }
     
@@ -2925,216 +3389,297 @@ BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem){
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t sem_take(bad_sem_t *sem,uint32_t delay){
-    if(!sem){
+bad_rtos_status_t sem_take(bad_sem_t *sem,u32 delay)
+{
+    if(!sem)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!sem->init_flag){
+    if(!sem->init_flag)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
-    uint32_t counter;
-    do{
+    u32 counter;
+    do
+    {
         counter = __ldrex(&sem->counter);
-        if(!counter){
+        
+        if(!counter)
+        {
             __clrex();
-            if(delay == UINT32_MAX){
+            if(delay == UINT32_MAX)
+            {
                 return BAD_RTOS_STATUS_WOULD_BLOCK;
             }
+            
             return __svc_sem_take(sem,delay);
         }
-    }while(__strex(counter-1, &sem->counter));
+    }
+    while(__strex(counter-1, &sem->counter));
+    
     return BAD_RTOS_STATUS_OK;
 }
 
-bad_rtos_status_t sem_put(bad_sem_t *sem){
-    if(!sem){
+bad_rtos_status_t sem_put(bad_sem_t *sem)
+{
+    if(!sem)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!sem->init_flag){
+    if(!sem->init_flag)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
-    uint32_t counter;
-    do{
+    u32 counter;
+    do
+    {
         counter = __ldrex(&sem->counter);
-        if(((volatile typeof(sem->blockedq) *)&sem->blockedq)->next){
+        if(((volatile typeof(sem->blockedq) *)&sem->blockedq)->next)
+        {
             __clrex();
             return __svc_sem_put(sem);
         }
-    }while(__strex(counter+1, &sem->counter));
+    }while(__strex(counter + 1, &sem->counter));
     
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __sem_put(bad_sem_t *sem){
+BAD_RTOS_STATIC bad_rtos_status_t __sem_put(bad_sem_t *sem)
+{
     bad_tcb_t *tcb = __synchro_wake(&sem->blockedq,__sem_timeout_cb,BAD_RTOS_STATUS_OK);
-    if(tcb){
+    
+    if(tcb)
+    {
         return BAD_RTOS_STATUS_OK;
     }
-    uint32_t counter;
-    do{
+    
+    u32 counter;
+    do
+    {
         counter = __ldrex(&sem->counter);
-    }while(__strex(counter+1, &sem->counter));
+    }
+    while(__strex(counter + 1, &sem->counter));
     
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __sem_take(bad_sem_t *sem, uint32_t delay){
-    if(!sem->counter){
+BAD_RTOS_STATIC bad_rtos_status_t __sem_take(bad_sem_t *sem, u32 delay)
+{
+    if(!sem->counter)
+    {
         return __synchro_block(&sem->blockedq, __sem_timeout_cb, delay, BAD_RTOS_MISC_SEM_BLOCKEDQ_MEMBER);
     }
-    uint32_t counter;
-    do{
+    
+    u32 counter;
+    do
+    {
         counter = __ldrex(&sem->counter);
-    }while(__strex(counter-1, &sem->counter));
+    }
+    while(__strex(counter-1, &sem->counter));
+    
     return BAD_RTOS_STATUS_OK;
 } 
 
-bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem){
-    if(!__get_ipsr()){
+bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem)
+{
+    if(!__get_ipsr())
+    {
         return BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    if(!sem){
+    if(!sem)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!sem->init_flag){
+    if(!sem->init_flag)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    uint32_t counter;
-    do{
+    
+    u32 counter;
+    do
+    {
         counter = __ldrex(&sem->counter);
-        if(!counter){
+        
+        if(!counter)
+        {
             __clrex();
             return __kernel_notify(BAD_ISR_OP_SEM_PUT,sem);
         }
-        
-    }while(__strex(counter+1, &sem->counter));
+    }
+    while(__strex(counter+1, &sem->counter));
     
     return BAD_RTOS_STATUS_OK;
 }
-
 #endif
 
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
-
-static void __event_barrier_timeout_cb(bad_task_handle_t handle ,void *event_barrier){
+static void __event_barrier_timeout_cb(bad_task_handle_t handle ,void *event_barrier)
+{
     (void)event_barrier;
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(BAD_TASK_HANDLE_GET_IDX(handle));
+    
+    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+    
     __remove_entry(tcb,BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER);
+    
     *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
 }
 
-bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, uint32_t count){
-    if(!event_barrier|| !count || count >= 32){
+bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count)
+{
+    if(!event_barrier|| !count || count >= 32)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(event_barrier->count && event_barrier->count != 32){
+    
+    if(event_barrier->count && event_barrier->count != 32)
+    {
         return BAD_RTOS_STATUS_IN_USE;
     }
+    
     *event_barrier = (bad_event_barrier_t){0};
+    
     BAD_OPT_BARRIER;
+    
     event_barrier->count = count;
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC uint32_t __event_barrier_wait(bad_event_barrier_t *event_barrier,uint32_t delay){
-    if(!event_barrier){
+BAD_RTOS_STATIC u32 __event_barrier_wait(bad_event_barrier_t *event_barrier,u32 delay)
+{
+    if(!event_barrier)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(!event_barrier->count){
+    
+    if(!event_barrier->count)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    if(event_barrier->count == 32){
+    
+    if(event_barrier->count == 32)
+    {
         return BAD_RTOS_STATUS_FIRED;
     }
     
     return __synchro_block(&event_barrier->blockedq,__event_barrier_timeout_cb,delay, BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER);
 }
 
-bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier,uint32_t flag){
-    if(!__get_ipsr()){
+bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier,u32 flag)
+{
+    if(!__get_ipsr())
+    {
         return BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK){
+    if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
-    if(!event_barrier->count){
+    if(!event_barrier->count)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    uint32_t flags,new_flags;
-    do{
-        
+    
+    u32 flags,new_flags;
+    do
+    {
         flags = __ldrex(&event_barrier->flags);
-        if(event_barrier->count == 32){
+        
+        if(event_barrier->count == 32)
+        {
             __clrex();
             return BAD_RTOS_STATUS_FIRED;
-        }       
+        }
+        
         new_flags = flags | flag;
-        if(new_flags == flags ){
+        
+        if(new_flags == flags)
+        {
             __clrex();
             return BAD_RTOS_STATUS_OK;
         }
-        
     }while(__strex(new_flags, &event_barrier->flags));
     
-    if(__builtin_popcount(new_flags) == event_barrier->count){
+    if(__builtin_popcount(new_flags) == event_barrier->count)
+    {
         event_barrier->count = 32;
         BAD_OPT_BARRIER;
+        
         event_barrier->flags = new_flags;//report correct flags on wakeup
         return __kernel_notify(BAD_ISR_OP_EVENT_BARRIER_WAKE,event_barrier);
     }
+    
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC void __event_barrier_wake(bad_event_barrier_t *event_barrier){
-    uint32_t flags = event_barrier->flags;
-    __synchro_wake_all(&event_barrier->blockedq,__event_barrier_timeout_cb,flags|EVENT_BARRIER_FLAGS_VALID_MASK);
+BAD_RTOS_STATIC void __event_barrier_wake(bad_event_barrier_t *event_barrier)
+{
+    u32 flags = event_barrier->flags;
+    
+    __synchro_wake_all(&event_barrier->blockedq,__event_barrier_timeout_cb,flags | EVENT_BARRIER_FLAGS_VALID_MASK);
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_fire(bad_event_barrier_t *event_barrier,uint32_t flag){
-    if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK){
+BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_fire(bad_event_barrier_t *event_barrier,u32 flag)
+{
+    if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(!event_barrier->count){
+    
+    if(!event_barrier->count)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED; 
     }    
     
-    uint32_t flags,new_flags;
-    do{
-        
+    u32 flags,new_flags;
+    do
+    {
         flags = __ldrex(&event_barrier->flags);
-        if(event_barrier->count == 32){
+        
+        if(event_barrier->count == 32)
+        {
             __clrex();
             return BAD_RTOS_STATUS_FIRED;
-        }       
+        }
+        
         new_flags = flags | flag;
-        if(new_flags == flags){
+        
+        if(new_flags == flags)
+        {
             __clrex();
             return BAD_RTOS_STATUS_OK;
         }    
-    }while(__strex(new_flags, &event_barrier->flags));
+    }
+    while(__strex(new_flags, &event_barrier->flags));
     
-    if(__builtin_popcount(new_flags) == event_barrier->count){
+    if(__builtin_popcount(new_flags) == event_barrier->count)
+    {
         event_barrier->count = 32; 
         BAD_OPT_BARRIER;
+        
         event_barrier->flags = new_flags;//report correct flags on wakeup
         __event_barrier_wake(event_barrier);
     }
+    
     return BAD_RTOS_STATUS_OK;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_delete(bad_event_barrier_t *event_barrier){
-    if(!event_barrier){
+BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_delete(bad_event_barrier_t *event_barrier)
+{
+    if(!event_barrier)
+    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    if(!event_barrier->count){
+    
+    if(!event_barrier->count)
+    {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
@@ -3144,182 +3689,213 @@ BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_delete(bad_event_barrier_t *ev
     
     return BAD_RTOS_STATUS_OK;
 }
-
 #endif
 
 //ISRS
 
-static void __attribute__((used)) __svc_c(uint8_t svc, uint32_t* stack){
-    switch (svc) {
-        //start first task
+static void __attribute__((used)) __svc_c(u8 svc, u32* stack)
+{
+    bad_task_handle_t handle = {0};
+    handle.val = stack[0];
+    
+    switch (svc)
+    {
+        case 0x2:
+        {
+            stack[0]=__task_unblock(handle);
+        }break;
         
-        case 0x2:{
-            stack[0]=__task_unblock(stack[0]);
-            break;
-        }
-        case 0x3:{
-            stack[0] =__task_delay_cancel(stack[0]);
-            break;
-        }
-        case 0x4:{
+        case 0x3:
+        {
+            stack[0] =__task_delay_cancel(handle);
+        }break;
+        
+        case 0x4:
+        {
             __task_finish();
             stack[0] = BAD_RTOS_STATUS_CANT_FINISH;
-            break;
-        }
-        case 0x5:{
+        }break;
+        
+        case 0x5:
+        {
             stack[0] = __task_yield();
-            break;
-        }
-        case 0x6:{
+        }break;
+        
+        case 0x6:
+        {
             __task_block();            
-            stack[0] = BAD_RTOS_STATUS_OK;              
-            break;
-        }
-        case 0x7:{
+            stack[0] = BAD_RTOS_STATUS_OK;
+        }break;
+        
+        case 0x7:
+        {
             __task_delay(stack[0], (cbptr) stack[1] ,(void*)stack[2]);
             stack[0] = BAD_RTOS_STATUS_OK;
-            break;
-        }
+        }break;
         
 #ifdef BAD_RTOS_USE_SEMAPHORE
-        case 0xA:{
+        case 0xA:
+        {
             stack[0] = __sem_put((bad_sem_t *)stack[0]);
-            break;
-        }
-        case 0xB:{
+        }break;
+        
+        case 0xB:
+        {
             stack[0] = __sem_take((bad_sem_t*)stack[0] , stack[1]);
-            break;
-        }
-        case 0xC:{
+        }break;
+        
+        case 0xC:
+        {
             stack[0] = __sem_delete((bad_sem_t*)stack[0]);
-            break;
-        }
+        }break;
 #endif
         
 #ifdef BAD_RTOS_USE_MUTEX
-        case 0xD:{
+        case 0xD:
+        {
             stack[0] = __mutex_put((bad_mutex_t*)stack[0]);
-            break;
-        }
-        case 0xE:{
+        }break;
+        
+        case 0xE:
+        {
             stack[0] = __mutex_take((bad_mutex_t*)stack[0], stack[1]);
-            break;
-        }
-        case 0xF:{
+        }break;
+        
+        case 0xF:
+        {
             stack[0] = __mutex_delete((bad_mutex_t*)stack[0]);
-            break;
-        }       
+        }break;
 #endif
         
 #ifdef BAD_RTOS_USE_MSGQ
-        case 0x10:{
+        case 0x10:
+        {
             stack[0] = __msgq_post_msg((bad_msgq_t *)stack[0],stack[1],(void*)stack[2],stack[3]);
-            break;
-        }
-        case 0x11:{
+        }break;
+        
+        case 0x11:
+        {
             stack[0] = __msgq_pull_msg((bad_msgq_t *)stack[0],(bad_msg_block_t *)stack[1],stack[2]);
-            break;
-        }
-        case 0x12:{
+        }break;
+        
+        case 0x12:
+        {
             stack[0] = __msgq_acquire((bad_msgq_t *)stack[0]);
-            break;
-        }
-        case 0x13:{
+        }break;
+        
+        case 0x13:
+        {
             stack[0] = __msgq_release((bad_msgq_t *)stack[0]);
-            break;
-        }
+        }break;
 #ifdef BAD_RTOS_USE_KHEAP
         case 0x14:{
             stack[0] = __msgq_acquire_allocate((bad_msgq_t *)stack[0],stack[1]);
-            break;
-        }
+        }break;
+        
         case 0x15:{
             stack[0] = __msgq_release_deallocate((bad_msgq_t *)stack[0]);
-            break;
-        }
+        }break;
 #endif
 #endif
+        
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
-        case 0x16:{
+        case 0x16:
+        {
             stack[0] = __event_barrier_wait((bad_event_barrier_t *)stack[0],stack[1]);
-            break;
-        }        
-        case 0x17:{
+        }break;
+        
+        case 0x17:
+        {
             stack[0] = __event_barrier_fire((bad_event_barrier_t *)stack[0],stack[1]);
-            break;
-        }        
-        case 0x18:{
+        }break;
+        
+        case 0x18:
+        {
             stack[0] = __event_barrier_delete((bad_event_barrier_t *)stack[0]);
-            break;
-        }
+        }break;
 #endif
-        case 0xF0:{
+        
+        case 0xF0:
+        {
             stack[0] = __sched_lock();
-            break;
-        }
-        case 0xF1:{
+        }break;
+        
+        case 0xF1:
+        {
             __sched_unlock(stack[0]);
-            break;
-        }
+        }break;
         
 #ifdef BAD_RTOS_USE_KHEAP
-        case 0xF2:{
-            stack[0]=(uint32_t)__kernel_alloc(stack[0]);
-            break;
-        }
-        case 0xF3:{
+        case 0xF2:
+        {
+            stack[0]=(u32)__kernel_alloc(stack[0]);
+        }break;
+        
+        case 0xF3:
+        {
             __kernel_free((void*)stack[0], stack[1]);
-            break;
-        } 
+        }break;
 #endif
-        case 0xF4:{
-            stack[0] = (uint32_t)__task_make((bad_task_descr_t*)stack[0]);
-            break;
-        }
-        case 0xF5:{
+        
+        case 0xF4:
+        {
+            stack[0] = __task_make((bad_task_descr_t*)stack[0]).val;
+        }break;
+        
+        case 0xF5:
+        {
             __kernel_start();
-            break;
-        }
-        default:{
+        }break;
+        
+        default:
+        {
             __builtin_unreachable();
         }
     }
 }
 
-static void __attribute__((used)) __pendsv_c(){
+static void __attribute__((used)) __pendsv_c()
+{
     bad_isr_op_obj_t *msg;
-    while((msg = __isr_q_pop(&kernel_cb.isrq))){
-        switch(msg->op_kind){
-            case BAD_ISR_OP_TASK_DELAY_CANCEL:{
-                __task_delay_cancel((bad_task_handle_t)(msg->arg));
-                break;
-            }
+    
+    while((msg = __isr_q_pop(&kernel_cb.isrq)))
+    {
+        bad_task_handle_t handle = {.val = (u32)msg->arg};
+        
+        switch(msg->op_kind)
+        {
+            case BAD_ISR_OP_TASK_DELAY_CANCEL:
+            {
+                __task_delay_cancel(handle);
+            }break;
             
-            case BAD_ISR_OP_TASK_UNBLOCK:{
-                __task_unblock((bad_task_handle_t)(msg->arg));
-                break;
-            }
+            case BAD_ISR_OP_TASK_UNBLOCK:
+            {
+                __task_unblock(handle);
+            }break;
             
 #ifdef BAD_RTOS_USE_SEMAPHORE
-            case BAD_ISR_OP_SEM_PUT:{
+            case BAD_ISR_OP_SEM_PUT:
+            {
                 __sem_put((bad_sem_t *)(msg->arg));
-                break;
-            }
+            }break;
 #endif
+            
 #ifdef BAD_RTOS_USE_MSGQ
-            case BAD_ISR_OP_MSGQ_WAKE:{
+            case BAD_ISR_OP_MSGQ_WAKE:
+            {
                 __msgq_try_wake((bad_msgq_t *)(msg->arg));
-                break;
-            }
+            }break;
 #endif
             
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
-            case BAD_ISR_OP_EVENT_BARRIER_WAKE:{
+            case BAD_ISR_OP_EVENT_BARRIER_WAKE:
+            {
                 __event_barrier_wake((bad_event_barrier_t *)(msg->arg));
-                break;
-            }
+            }break;
 #endif
-            default:{
+            default:
+            {
                 __builtin_unreachable();
             }
         }
@@ -3329,7 +3905,8 @@ static void __attribute__((used)) __pendsv_c(){
 
 // ASM stuff
 
-void __attribute__((naked)) BAD_RTOS_SVC_HANDLER_NAME(){ 
+void __attribute__((naked)) BAD_RTOS_SVC_HANDLER_NAME()
+{
     __asm__ volatile(
                      "svc_isr:               \n"
                      "tst lr, #4             \n"
@@ -3386,7 +3963,8 @@ void __attribute__((naked)) BAD_RTOS_SVC_HANDLER_NAME(){
 }
 
 //pendsv isr
-void __attribute__((naked)) BAD_RTOS_PENDSV_HANDLER_NAME(){ 
+void __attribute__((naked)) BAD_RTOS_PENDSV_HANDLER_NAME()
+{
     __asm__ volatile(
                      "push {r7,lr}             \n"
                      ".cfi_adjust_cfa_offset 8 \n"
@@ -3423,9 +4001,9 @@ void __attribute__((naked)) BAD_RTOS_PENDSV_HANDLER_NAME(){
                      );
 }
 
-void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME(){
+void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME()
+{
     __asm__ volatile(
-                     
                      "ldr r2,=%0               \n"
                      "ldrb r0,[r2,#20]         \n"
                      "cbz r0, exit             \n"
@@ -3491,7 +4069,7 @@ void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME(){
                      ".cfi_restore r3          \n"
                      ".cfi_restore r12         \n"
                      
-                     "pop {r7,lr}          \n"
+                     "pop {r7,lr}              \n"
                      ".cfi_adjust_cfa_offset -8\n"
                      ".cfi_restore r7          \n"
                      ".cfi_restore lr          \n"
@@ -3508,7 +4086,8 @@ void __attribute__((naked)) BAD_RTOS_TICK_HANDLER_NAME(){
 }
 
 //Common context switch code
-static void __attribute__((naked,used)) __try_context_switch(){
+static void __attribute__((naked,used)) __try_context_switch()
+{
     __asm__ volatile(
                      "ldr r1,=kernel_cb        \n"
                      "ldr r2,[r1,#8]           \n"
@@ -3532,12 +4111,10 @@ static void __attribute__((naked,used)) __try_context_switch(){
                      "str r2,[r1,#4]           \n"
                      "movs r4,#0               \n"
                      "str r4,[r1,#8]           \n"
+                     BAD_RTOS_ASM_LOAD_PSPLIM
 #ifdef BAD_RTOS_USE_MPU
-                     "mov r1,#0                \n"
-                     "str r1,[r12]             \n"
-                     "ldr r1,[r2,#4]           \n"
-                     "msr psplim,r1            \n"
-                     "ldr r2,[r2,#48]          \n"
+                     BAD_RTOS_ASM_SET_RNR
+                     "adds r2,#48              \n"
                      "add r1,r12,#4            \n"
                      "ldmia r2!,{r4-r11}       \n"
                      "stmia r1!,{r4-r11}       \n"
@@ -3548,7 +4125,6 @@ static void __attribute__((naked,used)) __try_context_switch(){
                      "isb                      \n"
 #endif
                      "ldmia r0!, {r4-r11,lr}   \n"
-                     "isb                      \n"
 #ifdef BAD_RTOS_USE_FPU
                      "tst lr,#0x10             \n"
                      "it eq                    \n"
@@ -3561,20 +4137,19 @@ static void __attribute__((naked,used)) __try_context_switch(){
 }
 
 //first task start
-void __attribute__((naked)) __init_second_stage(){
+void __attribute__((naked)) __init_second_stage()
+{
     __asm__ volatile(
                      "ldr r1,=__estack           \n"
                      "msr msp,r1                 \n"
                      "ldr r1,=kernel_cb          \n"
                      "ldr r2,[r1,#4]             \n"
                      "ldr r0,[r2]                \n"
+                     BAD_RTOS_ASM_LOAD_PSPLIM
 #ifdef BAD_RTOS_USE_MPU
                      "ldr r12,=%0                \n"
-                     "mov r1,#0                  \n"
-                     "str r1,[r12]               \n"
-                     "ldr r1,[r2,#4]             \n"
-                     "msr psplim,r1              \n"
-                     "ldr r2,[r2,#48]            \n"
+                     BAD_RTOS_ASM_SET_RNR
+                     "adds r2, #48               \n"
                      "add r1,r12,#4              \n"
                      "ldmia r2!,{r4-r11}         \n"
                      "stmia r1!,{r4-r11}         \n"
@@ -3641,7 +4216,6 @@ __asm__(
         "task_delay_cancel:             \n"
         "svc 0x3                        \n"
         "bx lr                          \n"
-        
         );
 
 __asm__(
@@ -3826,48 +4400,57 @@ __asm__(
 
 //helpers for specific common operations
 
-static inline __attribute__((always_inline)) uint32_t __ldrex(volatile uint32_t* addr){
-    uint32_t res;
+static inline __attribute__((always_inline)) u32 __ldrex(volatile u32* addr)
+{
+    u32 res;
     __asm__ volatile ("ldrex %0, %1" : "=r"(res): "Q"(*addr): "memory");
     return res;
 }
 
-static inline __attribute__((always_inline)) uint32_t __strex(uint32_t val,volatile uint32_t * addr){
-    uint32_t res;
+static inline __attribute__((always_inline)) u32 __strex(u32 val,volatile u32 * addr)
+{
+    u32 res;
     __asm__ volatile ("strex %0, %2, %1" : "=&r" (res), "=Q" (*addr) : "r" (val));
     return res;
 }
 
-static inline __attribute__((always_inline)) uint16_t __ldrexh(volatile uint16_t* addr){
-    uint32_t res;
+static inline __attribute__((always_inline)) u16 __ldrexh(volatile u16* addr)
+{
+    u32 res;
     __asm__ volatile ("ldrexh %0, %1" : "=r"(res): "Q"(*addr): "memory");
     return res;
 }
 
-static inline __attribute__((always_inline)) uint32_t __strexh(uint16_t val,volatile uint16_t * addr){
-    uint32_t res;
+static inline __attribute__((always_inline)) u32 __strexh(u16 val,volatile u16 * addr)
+{
+    u32 res;
     __asm__ volatile ("strexh %0, %2, %1" : "=&r" (res), "=Q" (*addr) : "r" (val));
     return res;
 }
 
-static inline __attribute__((always_inline)) void __clrex(){
+static inline __attribute__((always_inline)) void __clrex()
+{
     __asm__ volatile ("clrex":::"memory");
 }
 
-static inline __attribute__((always_inline)) void __dmb(){
+static inline __attribute__((always_inline)) void __dmb()
+{
     __asm__ volatile ("dmb":::"memory");
 }
 
-static inline __attribute__((always_inline)) void __dsb(){
+static inline __attribute__((always_inline)) void __dsb()
+{
     __asm__ volatile ("dsb":::"memory");
 }
 
-static inline __attribute__((always_inline)) void __isb(){
+static inline __attribute__((always_inline)) void __isb()
+{
     __asm__ volatile ("isb":::"memory");
 }
 
-static inline __attribute__((always_inline)) uint32_t __modify_basepri(uint32_t new_basepri){
-    uint32_t old_basepri;
+static inline __attribute__((always_inline)) u32 __modify_basepri(u32 new_basepri)
+{
+    u32 old_basepri;
     __asm__ volatile (
                       "mrs %0, basepri    \n"     
                       "msr basepri, %1    \n"  
@@ -3879,7 +4462,8 @@ static inline __attribute__((always_inline)) uint32_t __modify_basepri(uint32_t 
     return old_basepri;
 }
 
-static inline __attribute__((always_inline)) void __restore_basepri(uint32_t new_basepri){
+static inline __attribute__((always_inline)) void __restore_basepri(u32 new_basepri)
+{
     __asm__ volatile(
                      "msr basepri, %0    \n"
                      "isb                \n"
@@ -3888,7 +4472,8 @@ static inline __attribute__((always_inline)) void __restore_basepri(uint32_t new
                      );
 }
 
-static inline __attribute__((always_inline)) void __set_control(uint32_t new_control){
+static inline __attribute__((always_inline)) void __set_control(u32 new_control)
+{
     __asm__ volatile(
                      "msr control, %0    \n"
                      "isb                \n"
@@ -3897,14 +4482,16 @@ static inline __attribute__((always_inline)) void __set_control(uint32_t new_con
                      ); 
 }
 
-static inline __attribute__((always_inline)) uint32_t __get_control(){
-    uint32_t res;
+static inline __attribute__((always_inline)) u32 __get_control()
+{
+    u32 res;
     __asm__ volatile("mrs %0, control":"=r"(res));
     return res;
 }
 
-static inline __attribute__((always_inline)) uint32_t __get_ipsr(){
-    uint32_t res;
+static inline __attribute__((always_inline)) u32 __get_ipsr()
+{
+    u32 res;
     __asm__ volatile("mrs %0, ipsr":"=r"(res));
     return res;
 }

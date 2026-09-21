@@ -32,8 +32,10 @@ load_paths ={
 };
 
 commands = {
-    .f2 = { .linux = "bash build.sh h562 msgq_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
-    .f3 = { .linux = "bash build.sh f411 msgq_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f2 = { .linux = "bash build.sh h562 sem_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f3 = { .linux = "bash build.sh f411 msgq debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f4 = { .linux = "bash compile_all_test.sh f411", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f5 = { .linux = "bash compile_all_test.sh h562", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
 };
 
 fkey_command =
@@ -41,4 +43,6 @@ fkey_command =
     .F1 = "f1",
     .F2 = "f2",
     .F3 = "f3",
+    .F4 = "f4",
+    .F5 = "f5"
 };

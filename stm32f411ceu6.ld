@@ -3,10 +3,9 @@ MEMORY
     ROM (rx) : ORIGIN = 0x8000000, LENGTH  = 512k
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH  = 128k
 }
+
 __eram = ORIGIN(RAM) + LENGTH(RAM);
 __estack = __eram;
-
-
 
 SECTIONS
 {   
@@ -46,7 +45,6 @@ SECTIONS
         __heap = .;
         *(.kheap)
     } > RAM
-
 
     __rdata = LOADADDR(.data); /* data placed in rom */
 

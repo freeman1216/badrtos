@@ -38,11 +38,11 @@ void bad_user_setup(){
         .base_priority = TASK2_PRIORITY
     };
     task2h = task_make(&task2_descr);
-}```
+}
+```
 4. Start the scheduler
 ```c
 bad_rtos_start();
-
 ```
 
 ## Notes

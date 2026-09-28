@@ -1,15 +1,14 @@
-#define BAD_RTOS_IMPLEMENTATION
-#define BAD_RTOS_PLATFORM_IMPLEMENTATION
 #include "platform_include.h"
+#include "runner.h"
 
 #ifdef BAD_RTOS_USE_MSGQ
 
-bad_task_handle_t task1h;
-bad_task_handle_t task2h;
+#define TASK1_PRIORITY 1 
+#define TASK2_PRIORITY 1
 
-MSGQ_STATIC_INIT(task1q, 16);
+MSGQ_DECLARE_STATIC(task1q, 16);
 
-void task1(void *unused)
+static void task1(void *unused)
 {
     (void)unused;
     
@@ -18,11 +17,11 @@ void task1(void *unused)
     volatile uint32_t sig2 = 0;
     volatile uint32_t sig3 = 0;
     
-    while(1)
+    bad_msg_block_t msg = {0};
+    msgq_pull_msg(&task1q, &msg,0);
+    
+    do
     {
-        bad_msg_block_t msg = {0};
-        msgq_pull_msg(&task1q, &msg,0);
-        
         switch(msg.signal)
         {
             case 0:
@@ -46,82 +45,56 @@ void task1(void *unused)
             }break;
         }
     }
+    while(msgq_pull_msg(&task1q, &msg, -1) != BAD_RTOS_STATUS_WOULD_BLOCK);
+    
+    if(sig0 == 4 && sig1 == 4 && sig2 == 4 && sig3 == 4)
+    {
+        msgq_release(&task1q);
+        bad_test_check_in();
+        task_finish();
+    }
+    else
+    {
+        bad_test_fail();
+    }
 }
 
-
-void task2(void *unused)
+static void task2(void *unused)
 {
     (void)unused;
-    static volatile uint32_t sig = 0;
-    while(1)
+    u32 sig = 0;
+    
+    while(msgq_post_msg(&task1q,sig,0,-1) != BAD_RTOS_STATUS_WOULD_BLOCK)
     {
-        msgq_post_msg(&task1q, sig, 0,0);
         sig = (sig + 1) & 0x3;
     }
+    
+    bad_test_check_in();
+    task_finish();
 }
 
-#define TASK1_PRIORITY 1 
-#define TASK2_PRIORITY 1
-#define TASK2_STACK_SIZE 1024
-#define TASK1_STACK_SIZE 1024
-TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
+static const bad_task_descr_t task1_descr = {
+    .stack = task1_stack,
+    .stack_size = TASK1_STACK_SIZE,
+    .entry = task1,
+    .assigned_msgq = &task1q,
+    .ticks_to_change = 500,
+    .base_priority = TASK1_PRIORITY
+};
 
-bad_rtos_status_t bad_user_init()
-{
-    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
-    
-    bad_task_descr_t task1_descr = {
-        .stack = 0,
-        .stack_size = TASK1_STACK_SIZE,
-        .entry = task1,
-        .assigned_msgq = &task1q,
-        .ticks_to_change = 500,
-        .base_priority = TASK1_PRIORITY
-    };
-    
-    task1h = task_make(&task1_descr);
-    
-    ret = BAD_TASK_HANDLE_GET_ERROR(task1h);
-    if(ret != BAD_RTOS_STATUS_OK)
-        return ret;
-    
-    bad_task_descr_t task2_descr = {
-        .stack = task2_stack,
-        .stack_size = TASK2_STACK_SIZE,
-        .entry = task2,
-        .ticks_to_change = 500,
-        .base_priority = TASK2_PRIORITY
-    };
-    
-    task2h = task_make(&task2_descr);
-    
-    ret = BAD_TASK_HANDLE_GET_ERROR(task2h);
-    
-    return ret;
-}
+static const bad_task_descr_t task2_descr = {
+    .stack = task2_stack,
+    .stack_size = TASK2_STACK_SIZE,
+    .entry = task2,
+    .ticks_to_change = 500,
+    .base_priority = TASK2_PRIORITY
+};
 
-#else
-
-bad_rtos_status_t bad_user_init()
-{
-    return BAD_RTOS_STATUS_OK;
-}
+BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,msgq) = {
+    .task1_descr = &task1_descr,
+    .task2_descr = &task2_descr,
+    .num_testcases = 2,
+    .test_name = "Message queue"
+};
 
 #endif
-
-
-int __attribute__((noinline)) main()
-{
-    __platform_setup();
-    
-#ifdef BAD_RTOS_USE_MUTEX
-    bad_rtos_start();
-#endif
-    
-    while(1)
-    {
-        
-    }
-    
-    return 0;
-}

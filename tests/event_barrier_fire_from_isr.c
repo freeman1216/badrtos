@@ -1,83 +1,54 @@
-#define BAD_RTOS_ISR_TEST
-#define BAD_RTOS_PLATFORM_IMPLEMENTATION
-#define BAD_RTOS_IMPLEMENTATION
 #include "platform_include.h"
+#include "runner.h"
 
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
-bad_task_handle_t task1h;
-bad_event_barrier_t evb;
 
-void task1(void *unused)
+#define TASK1_PRIORITY 1 
+
+#define REPORTED_FLAGS 0x3
+
+static bad_event_barrier_t evb;
+
+static void task1(void *unused)
 {
     (void)unused;
     
-    volatile uint32_t unblocked = 0;
+    event_barrier_prime(&evb, 2);
+    u32 flags = event_barrier_wait(&evb, 0);
     
-    while(1)
+    u32 stripped = EVENT_BARRIER_GET_FLAGS(flags);
+    
+    if(stripped == REPORTED_FLAGS)
     {
-        event_barrier_prime(&evb, 1);
-        event_barrier_wait(&evb, 0);
-        unblocked++;
+        bad_test_check_in();
+        task_finish();
+    }
+    else
+    {
+        bad_test_fail();
     }
 }
 
-uint32_t shift;
-
-void isr_test()
+static void isr_test()
 {
-    event_barrier_fire_from_isr(&evb, 1UL << shift);
-    shift = (shift + 1) % 31;
+    static u32 sent_flags = 0x1;
+    event_barrier_fire_from_isr(&evb, sent_flags);
+    sent_flags ^= 0x3;
 }
 
-#define TASK1_PRIORITY 1 
-#define TASK1_STACK_SIZE 1024
+static const bad_task_descr_t task1_descr = {
+    .stack = task1_stack,
+    .stack_size = TASK1_STACK_SIZE,
+    .entry = task1,
+    .ticks_to_change = 500,
+    .base_priority = TASK1_PRIORITY
+};
 
-TASK_STATIC_STACK(task1, TASK1_STACK_SIZE);
-
-bad_rtos_status_t bad_user_init()
-{
-    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
-    
-    bad_task_descr_t task1_descr = {
-        .stack = task1_stack,
-        .stack_size = TASK1_STACK_SIZE,
-        .entry = task1,
-        .ticks_to_change = 500,
-        .base_priority = TASK1_PRIORITY
-    };
-    task1h = task_make(&task1_descr);
-    
-    ret = BAD_TASK_HANDLE_GET_ERROR(task1h);
-    
-    return ret;
-}
-
-#else
-
-void isr_test()
-{
-    
-}
-
-bad_rtos_status_t bad_user_init()
-{
-    return BAD_RTOS_STATUS_OK;
-}
+BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,evb_from_isr) = {
+    .task1_descr = &task1_descr,
+    .isr_test_func = isr_test,
+    .num_testcases = 1,
+    .test_name = "EVB from isr"
+};
 
 #endif
-
-int __attribute__((noinline)) main()
-{
-    __platform_setup();
-    
-#ifdef BAD_RTOS_USE_EVENT_BARRIER
-    bad_rtos_start();
-#endif
-    
-    while(1)
-    {
-        
-    }
-    
-    return 0;
-}

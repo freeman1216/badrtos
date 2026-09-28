@@ -29,14 +29,14 @@ SECTIONS {
 		__ekernel_data = .;
 	} > RAM AT > ROM
 
-	.static_stacks : ALIGN(32)
+	.static_stacks (NOLOAD) : ALIGN(32)
 	{
 		__static_stacks = .;
         *(.static_stacks)
         __estatic_stacks = .;
 	}
 
-    .heap : ALIGN(32)
+    .heap (NOLOAD) : ALIGN(32)
     {
         __heap = .;
         *(.kheap)
@@ -52,7 +52,7 @@ SECTIONS {
         __edata = .;
     } > RAM AT > ROM
     
-    .bss : ALIGN(4)
+    .bss (NOLOAD) : ALIGN(4)
     {
         __bss = .;
         *(.bss)

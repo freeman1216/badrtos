@@ -1,98 +1,86 @@
-#include <math.h>
-#define BAD_RTOS_PLATFORM_IMPLEMENTATION
-#define BAD_RTOS_IMPLEMENTATION
 #include "platform_include.h"
+#include "runner.h"
 
 #ifdef BAD_RTOS_USE_FPU
-
-bad_task_handle_t task1h;
-bad_task_handle_t task2h;
-
-void task1(void *unused){
-    (void)unused;
-    
-    volatile float f = 1.0f;
-    
-    while(1)
-    {
-        f *= 1.75f;
-        task_yield();
-    }
-}
-
-void task2(void *unused)
-{
-    (void)unused;
-    
-    volatile float f = 1.0f;
-    
-    while(1)
-    {
-        f *= 2.25f;
-        task_yield();
-    }
-}
 
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 1
-#define TASK2_STACK_SIZE 1024
-#define TASK1_STACK_SIZE 1024
-TASK_STATIC_STACK(task2, TASK2_STACK_SIZE);
 
-bad_rtos_status_t bad_user_init()
+static void task1(void *unused)
 {
-    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    (void)unused;
     
-    bad_task_descr_t task1_descr = {
-        .stack = 0,
-        .stack_size = TASK1_STACK_SIZE,
-        .entry = task1,
-        .ticks_to_change = 500,
-        .base_priority = TASK1_PRIORITY
-    };
+    float f = 2.0f;
+    float fmul = 1.5f;
+    float res = 0.0f;
     
-    task1h = task_make(&task1_descr);
+    __asm__ volatile (
+                      "vmul.f32 %0,%1,%2 \n"
+                      "bl task_yield  \n"
+                      : "=&t"(res)
+                      : "t" (f), "t"(fmul)
+                      : "lr", "memory"
+                      );
     
-    ret = BAD_TASK_HANDLE_GET_ERROR(task1h);
-    if(ret != BAD_RTOS_STATUS_OK)
-        return ret;
-    
-    bad_task_descr_t task2_descr = {
-        .stack = task2_stack,
-        .stack_size = TASK2_STACK_SIZE,
-        .entry = task2,
-        .ticks_to_change = 500,
-        .base_priority = TASK2_PRIORITY
-    };
-    
-    task2h = task_make(&task2_descr);
-    
-    ret = BAD_TASK_HANDLE_GET_ERROR(task2h);
-    
-    return ret;
-}
-
-#else
-
-bad_rtos_status_t bad_user_init()
-{
-    return BAD_RTOS_STATUS_OK;
-}
-
-#endif
-
-int __attribute__((noinline)) main()
-{
-    __platform_setup();
-    
-#ifdef BAD_RTOS_USE_FPU
-    bad_rtos_start();
-#endif
-    
-    while(1)
+    if(res == 3.0f)
     {
-        
+        bad_test_check_in();
+        task_finish();
     }
-    
-    return 0;
+    else
+    {
+        bad_test_fail();
+    }
 }
+
+static void task2(void *unused)
+{
+    (void)unused;
+    
+    float f = 4.0f;
+    float fmul = 1.5f;
+    float res = 0.0f;
+    
+    __asm__ volatile (
+                      "vmul.f32 %0,%1,%2 \n"
+                      "bl task_yield  \n"
+                      : "=&t"(res)
+                      : "t" (f), "t"(fmul)
+                      : "lr", "memory"
+                      );
+    
+    if(res == 6.0f)
+    {
+        bad_test_check_in();
+        task_finish();
+    }
+    else
+    {
+        bad_test_fail();
+    }
+}
+
+static const bad_task_descr_t task1_descr = {
+    .stack = task1_stack,
+    .stack_size = TASK1_STACK_SIZE,
+    .entry = task1,
+    .ticks_to_change = 500,
+    .base_priority = TASK1_PRIORITY
+};
+
+static const bad_task_descr_t task2_descr = {
+    .stack = task2_stack,
+    .stack_size = TASK2_STACK_SIZE,
+    .entry = task2,
+    .ticks_to_change = 500,
+    .base_priority = TASK2_PRIORITY
+};
+
+BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,fpu) = {
+    .task1_descr = &task1_descr,
+    .task2_descr = &task2_descr,
+    .num_testcases = 2,
+    .test_name = "FPU"
+};
+
+#endif

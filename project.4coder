@@ -24,7 +24,8 @@ patterns =
 };
 
 paths = {
-    {.path = ".", .recursive = false , .relative = true,}, 
+    {.path = "inc", .recursive = false , .relative = true,}, 
+    {.path = "tests", .recursive = true, .relative = true,}, 
 };
 
 load_paths ={
@@ -34,8 +35,8 @@ load_paths ={
 commands = {
     .f2 = { .linux = "bash build.sh h562 sem_post_from_isr debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
     .f3 = { .linux = "bash build.sh f411 msgq debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
-    .f4 = { .linux = "bash compile_all_test.sh f411", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
-    .f5 = { .linux = "bash compile_all_test.sh h562", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f4 = { .linux = "bash compile_all_examples.sh f411", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+    .f5 = { .linux = "bash run_tests.sh h562 debug", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
 };
 
 fkey_command =

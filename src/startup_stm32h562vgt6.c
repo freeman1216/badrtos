@@ -28,6 +28,8 @@ extern int main();
 void default_isr(){
     while(1);
 }
+
+WEAK_ISR(memmanage_isr);
 WEAK_ISR(isr_hardfault);
 WEAK_ISR(pendsv_isr);
 WEAK_ISR(systick_isr);
@@ -204,7 +206,7 @@ const isr_addr_t ivt_table[IVT_SIZE] __attribute__((used,section(".ivt")))={
     isr_reset,
     0, //NMI
     isr_hardfault,
-    isr_hardfault,
+    memmanage_isr,
     isr_hardfault,
     isr_hardfault,
     isr_hardfault,

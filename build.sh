@@ -3,11 +3,11 @@
 set -xe
 code="$PWD"
 
-options="-ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard -nolibc --specs=nosys.specs -nostartfiles -I$code/inc/"
+options="-ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard -nolibc --specs=nosys.specs -nostartfiles -I$code/tests -I$code/inc/"
 added_opts=""
 optimisation=""
 src=""
-test_src=""
+example_src=""
 run_debug=""
 
 while [ $# -gt 0 ]; do
@@ -27,55 +27,55 @@ while [ $# -gt 0 ]; do
             run_debug="true"
             ;;
         time_frame)
-            test_src="$code/tests/time_frame.c"
+            example_src="$code/examples/time_frame.c"
             ;;
         block_delay)
-            test_src="$code/tests/block_delay.c"
+            example_src="$code/examples/block_delay.c"
             ;;
         mutex_block)
-            test_src="$code/tests/mutex_block.c"
+            example_src="$code/examples/mutex_block.c"
             ;;
         mutex_delay)
-            test_src="$code/tests/mutex_delay.c"
+            example_src="$code/examples/mutex_delay.c"
             ;;
         mutex_delete)
-            test_src="$code/tests/mutex_delete.c"
+            example_src="$code/examples/mutex_delete.c"
             ;;
         sem_block)
-            test_src="$code/tests/sem_block.c"
+            example_src="$code/examples/sem_block.c"
             ;;
         sem_delay)
-            test_src="$code/tests/sem_delay.c"
+            example_src="$code/examples/sem_delay.c"
             ;;
         sem_delete)
-            test_src="$code/tests/sem_delete.c"
+            example_src="$code/examples/sem_delete.c"
             ;;
         sem_post_from_isr)
-            test_src="$code/tests/sem_post_from_isr.c"
+            example_src="$code/examples/sem_post_from_isr.c"
             ;;
         msgq)
-            test_src="$code/tests/msgq.c"
+            example_src="$code/examples/msgq.c"
             ;;
         msgq_post_from_isr)
-            test_src="$code/tests/msgq_post_from_isr.c"
+            example_src="$code/examples/msgq_post_from_isr.c"
             ;;
         event_barrier_block)
-            test_src="$code/tests/event_barrier_block.c"
+            example_src="$code/examples/event_barrier_block.c"
             ;;
         event_barrier_delay)
-            test_src="$code/tests/event_barrier_delay.c"
+            example_src="$code/examples/event_barrier_delay.c"
             ;;
         event_barrier_delete)
-            test_src="$code/tests/event_barrier_delete.c"
+            example_src="$code/examples/event_barrier_delete.c"
             ;;
         event_barrier_post_from_isr)
-            test_src="$code/tests/event_barrier_post_from_isr.c"
+            example_src="$code/examples/event_barrier_post_from_isr.c"
             ;;
         fpu)
-            test_src="$code/tests/fpu.c"
+            example_src="$code/examples/fpu.c"
             ;;
         buddy)
-            test_src="$code/tests/buddy.c"
+            example_src="$code/examples/buddy.c"
             ;;
         *)
             echo "Platform not supported"
@@ -85,7 +85,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-arm-none-eabi-gcc $added_opts $options $optimisation -I$code/inc/ $src $test_src  -o build/out.elf
+arm-none-eabi-gcc $added_opts $options $optimisation -I$code/inc/ $src $example_src  -o build/out.elf
 
 if [ $run_debug = "true" ]; then 
     gf-svd build/out.elf \

@@ -7,7 +7,7 @@
 
 bad_task_handle_t task1h;
 
-MSGQ_STATIC_INIT(task1q, 16);
+MSGQ_DECLARE_STATIC(task1q, 16);
 
 void task1(void *unused)
 {

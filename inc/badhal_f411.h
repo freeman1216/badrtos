@@ -64,27 +64,27 @@
 
 typedef struct
 {
-  __IO  uint32_t CPUID;                  
-  __IO  uint32_t ICSR;                   
-  __IO  uint32_t VTOR;                   
-  __IO  uint32_t AIRCR;                  
-  __IO  uint32_t SCR;                    
-  __IO  uint32_t CCR;                    
-  __IO  uint8_t  SHP[12];               
-  __IO  uint32_t SHCSR;                  
-  __IO  uint32_t CFSR;                   
-  __IO  uint32_t HFSR;                   
-  __IO  uint32_t DFSR;                   
-  __IO  uint32_t MMFAR;                  
-  __IO  uint32_t BFAR;                   
-  __IO  uint32_t AFSR;                   
-  __IO  uint32_t PFR[2];                
-  __IO  uint32_t DFR;                    
-  __IO  uint32_t ADR;                    
-  __IO  uint32_t MMFR[4];               
-  __IO  uint32_t ISAR[5];               
-        uint32_t RESERVED0[5];
-  __IO  uint32_t CPACR;                  
+    __IO  uint32_t CPUID;                  
+    __IO  uint32_t ICSR;                   
+    __IO  uint32_t VTOR;                   
+    __IO  uint32_t AIRCR;                  
+    __IO  uint32_t SCR;                    
+    __IO  uint32_t CCR;                    
+    __IO  uint8_t  SHP[12];               
+    __IO  uint32_t SHCSR;                  
+    __IO  uint32_t CFSR;                   
+    __IO  uint32_t HFSR;                   
+    __IO  uint32_t DFSR;                   
+    __IO  uint32_t MMFAR;                  
+    __IO  uint32_t BFAR;                   
+    __IO  uint32_t AFSR;                   
+    __IO  uint32_t PFR[2];                
+    __IO  uint32_t DFR;                    
+    __IO  uint32_t ADR;                    
+    __IO  uint32_t MMFR[4];               
+    __IO  uint32_t ISAR[5];               
+    uint32_t RESERVED0[5];
+    __IO  uint32_t CPACR;                  
 } SCB_typedef_t;
 
 typedef enum{
@@ -97,8 +97,8 @@ typedef enum{
 
 typedef enum{
     SCB_MEMORY_MANAGEMENT_INTR = 0,
-    SCB_BUS_FAULT_INTR=1,
-    SCB_USAGE_FAULT_INTR=2,
+    SCB_BUS_FAULT_INTR = 1,
+    SCB_USAGE_FAULT_INTR = 2,
     SCB_SVC_INTR = 7,
     SCB_DEBUG_MONITOR_INTR = 8,
     SCB_PENDSV_INTR = 10,
@@ -207,40 +207,40 @@ typedef enum{
 }mpu_permissions_t;
 
 #define NEXT_POW2(x) ( \
-    (x) <= 32 ? 32 :   \
-    (x) <= 64 ? 64 :   \
-    (x) <=128 ? 128:   \
-    (x) <=256 ? 256:   \
-    (x) <=512 ? 512:   \
-    (x) <=1024 ? 1024: \
-    (x) <=2048 ? 2048: \
-    (x) <=4096 ? 4096: \
-    (x) <=8192 ? 8912: \
-    16384\
+(x) <= 32 ? 32 :   \
+(x) <= 64 ? 64 :   \
+(x) <=128 ? 128:   \
+(x) <=256 ? 256:   \
+(x) <=512 ? 512:   \
+(x) <=1024 ? 1024: \
+(x) <=2048 ? 2048: \
+(x) <=4096 ? 4096: \
+(x) <=8192 ? 8912: \
+16384\
 )
 
 #define PREV_POW2(x)( \
-    ((x) >= 32 && (x) < 64)  ? 32 :     \
-    ((x) >= 64 && (x) < 128) ? 64 :     \
-    ((x) >= 128 && (x) < 256) ? 128 :   \
-    ((x) >= 256 && (x) < 512) ? 256 :   \
-    ((x) >= 512 && (x) < 1024) ? 512 :  \
-    ((x) >= 1024 && (x) < 2048) ? 1024 :\
-    ((x) >= 2048 && (x) < 4096) ? 2048 :\
-    4096\
+((x) >= 32 && (x) < 64)  ? 32 :     \
+((x) >= 64 && (x) < 128) ? 64 :     \
+((x) >= 128 && (x) < 256) ? 128 :   \
+((x) >= 256 && (x) < 512) ? 256 :   \
+((x) >= 512 && (x) < 1024) ? 512 :  \
+((x) >= 1024 && (x) < 2048) ? 1024 :\
+((x) >= 2048 && (x) < 4096) ? 2048 :\
+4096\
 )
 
 #define FIND_SIZE(x)(\
-    (x) == 32 ? (4<<1):   \
-    (x) == 64 ? (5<<1):   \
-    (x) == 128 ? (6<<1):  \
-    (x) == 256 ? (7<<1):  \
-    (x) == 512 ? (8<<1):  \
-    (x) == 1024 ? (9<<1): \
-    (x) == 2048 ? (10<<1):\
-    (x) == 4096 ? (11<<1):\
-    (x) == 8192 ? (12<<1):\
-    16384\
+(x) == 32 ? (4<<1):   \
+(x) == 64 ? (5<<1):   \
+(x) == 128 ? (6<<1):  \
+(x) == 256 ? (7<<1):  \
+(x) == 512 ? (8<<1):  \
+(x) == 1024 ? (9<<1): \
+(x) == 2048 ? (10<<1):\
+(x) == 4096 ? (11<<1):\
+(x) == 8192 ? (12<<1):\
+16384\
 )
 #define MPU_RASR_XN (0x10000000)
 
@@ -512,7 +512,7 @@ extern void rcc_fallback_to_hsi(){
     RCC->CFGR &= ~(SW_NOT_ALLOWED);
     RCC->CFGR |= SW_HSI;
     while ((RCC->CFGR & SWS_MASK)  != SW_HSI<<2);
-
+    
 }
 
 ALWAYS_STATIC void rcc_enable_hse(void) {
@@ -545,7 +545,7 @@ ALWAYS_STATIC void rcc_enable_and_switch_to_pll(){
 }
 
 ALWAYS_STATIC void rcc_bus_prescalers_setup(HPRE_state_t ahb_prescaler,PPRE_state_t apb1_prescaler,
-    PPRE_state_t apb2_prescaler)
+                                            PPRE_state_t apb2_prescaler)
 {
     RCC->CFGR &= ~(PPRE1_MASK | PPRE2_MASK | HPRE_MASK);
     RCC->CFGR |= PPRE1_SET(apb1_prescaler) | PPRE2_SET(apb2_prescaler) | HPRE_SET(ahb_prescaler);
@@ -556,7 +556,7 @@ ALWAYS_STATIC void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,u
     if(!(RCC->CR & HSION_MASK) && source == PLL_SOURCE_HSI){
         rcc_enable_hsi();
     }
-
+    
     if(RCC->CR & PLLON_MASK){
         RCC->CR &=~(PLLON_MASK); 
         while (RCC->CR & PLLRDY_MASK);
@@ -566,7 +566,7 @@ ALWAYS_STATIC void rcc_pll_setup(PLLP_states_t PLLP,uint8_t PLLM,uint16_t PLLN,u
     }
     RCC->PLLCFGR = PLLP | PLLM_SET(PLLM) | PLLN_SET(PLLN) | PLLQ_SET(PLLQ) | source;  
     
-
+    
 }
 
 extern void rcc_sysclock_setup(){
@@ -693,7 +693,7 @@ ALWAYS_STATIC void nvic_enable_interrupt(NVIC_programmable_intr_t intrnum)
     NVIC->ISER[ISER_idx] = ISER_intr_mask;
     DSB;
     OPT_BARRIER;
-   
+    
 }
 
 ALWAYS_STATIC void nvic_clear_interrupt(NVIC_programmable_intr_t intrnum)
@@ -728,10 +728,10 @@ ALWAYS_STATIC void nvic_set_interrupt_priority(NVIC_programmable_intr_t intrnum,
 #ifdef BAD_HAL_USE_SYSTICK
 
 typedef struct {
-  __IO uint32_t CTRL;                   
-  __IO uint32_t LOAD;                   
-  __IO uint32_t VAL;                    
-  __IO  uint32_t CALIB;                  
+    __IO uint32_t CTRL;                   
+    __IO uint32_t LOAD;                   
+    __IO uint32_t VAL;                    
+    __IO  uint32_t CALIB;                  
 } Systick_typedef_t;
 
 #define SYSTICK_BASE (0xE000E010UL)
@@ -768,9 +768,9 @@ ALWAYS_STATIC void systick_disable(){
 
 #ifndef BAD_USART_DEF
 #ifdef BAD_USART_STATIC
-    #define BAD_USART_DEF ALWAYS_STATIC
+#define BAD_USART_DEF ALWAYS_STATIC
 #else
-    #define BAD_USART_DEF extern
+#define BAD_USART_DEF extern
 #endif
 #endif
 
@@ -801,8 +801,8 @@ typedef enum{
 
 
 #define USART_CALCULATE_BRR(baud,clock) \
-    (((uint16_t)((float)clock/(16*baud)) << 4) | \
-     (uint8_t)(((((float)clock/(16*baud)) - (uint16_t)((float)clock/(16*baud)))*16) + 0.5f))
+(((uint16_t)((float)clock/(16*baud)) << 4) | \
+(uint8_t)(((((float)clock/(16*baud)) - (uint16_t)((float)clock/(16*baud)))*16) + 0.5f))
 
 
 #define USART_BRR_115200 USART_CALCULATE_BRR(115200UL,CLOCK_SPEED)
@@ -862,10 +862,10 @@ BAD_USART_DEF void uart_disable(__IO USART_typedef_t * USART);
 BAD_USART_DEF void uart_putchar_polling(__IO USART_typedef_t*,char);
 BAD_USART_DEF char uart_getchar_polling(__IO USART_typedef_t*);
 BAD_USART_DEF void uart_setup(__IO USART_typedef_t * USART,
-    uint16_t BRR,
-    USART_feature_t features,
-    USART_misc_t misc,
-    USART_interrupt_flags_t interrupt);
+                              uint16_t BRR,
+                              USART_feature_t features,
+                              USART_misc_t misc,
+                              USART_interrupt_flags_t interrupt);
 BAD_USART_DEF void uart_send_str_polling(__IO USART_typedef_t* USART ,const char* str);
 BAD_USART_DEF void uart_send_hex_32bit(__IO USART_typedef_t* USART,uint32_t value);
 BAD_USART_DEF void uart_send_dec_unsigned_32bit(__IO USART_typedef_t *USART ,uint32_t value);
@@ -892,10 +892,10 @@ BAD_USART_DEF char uart_getchar_polling(__IO USART_typedef_t* USART){
 }
 
 BAD_USART_DEF void uart_setup(__IO USART_typedef_t * USART,
-    uint16_t BRR,
-    USART_feature_t features,
-    USART_misc_t misc,
-    USART_interrupt_flags_t interrupts)
+                              uint16_t BRR,
+                              USART_feature_t features,
+                              USART_misc_t misc,
+                              USART_interrupt_flags_t interrupts)
 {
     USART->CR1 = features| interrupts;
     USART->BRR = BRR;
@@ -925,13 +925,13 @@ BAD_USART_DEF void uart_send_dec_unsigned_32bit(__IO USART_typedef_t *USART ,uin
     char buff[11];
     char *write = buff+11;
     *--write = 0;
-
+    
     do{ 
         *--write = (value%10)+'0';
         value/=10;
     }
     while (value!=0);
-
+    
     uart_send_str_polling(USART, write);
     uart_send_str_polling(USART, "\r\n");
 }
@@ -1046,9 +1046,9 @@ extern inline void io_setup_pin(__IO GPIO_typedef_t *GPIO, uint8_t pin_num, MODE
 #ifdef BAD_HAL_USE_SPI
 
 #ifdef BAD_SPI_STATIC
-    #define BAD_SPI_DEF ALWAYS_STATIC
+#define BAD_SPI_DEF ALWAYS_STATIC
 #else
-    #define BAD_SPI_DEF extern
+#define BAD_SPI_DEF extern
 #endif
 
 typedef struct{
@@ -1165,7 +1165,7 @@ BAD_SPI_DEF void spi_transmit_only(__IO SPI_typedef_t *SPI, uint8_t data){;
     SPI->DR = data;
     while (!(SPI->SR & SPI_SR_BSY_MASK));
     while (SPI->SR & SPI_SR_BSY_MASK); 
-
+    
 }
 #endif
 
@@ -1175,9 +1175,9 @@ BAD_SPI_DEF void spi_transmit_only(__IO SPI_typedef_t *SPI, uint8_t data){;
 #ifdef BAD_HAL_USE_DMA
 
 #ifdef BAD_DMA_STATIC
-    #define BAD_DMA_DEF static inline
+#define BAD_DMA_DEF static inline
 #else
-    #define BAD_DMA_DEF extern
+#define BAD_DMA_DEF extern
 #endif
 
 typedef struct{
@@ -1290,7 +1290,7 @@ ALWAYS_STATIC void dma_clear_interrupts(__IO DMA_typedef_t * DMA,DMA_stream_num_
         16,
         22
     };
-
+    
     if (stream <= 3){
         DMA->LIFCR = interrupts << shift[stream];
     }
@@ -1315,13 +1315,13 @@ ALWAYS_STATIC void dma_start_transfer(__IO DMA_typedef_t * DMA, DMA_stream_num_t
 }
 
 BAD_DMA_DEF void dma_setup_transfer(__IO DMA_typedef_t * DMA, 
-    DMA_stream_num_t stream,
-    DMA_channel_num_t channel,volatile uint32_t mem,
-    uint16_t bufflen,
-    uint32_t periph, 
-    DMA_interrupts_t interrupts, 
-    DMA_features_t features,
-    DMA_fifo_settings_t fifo_settings);
+                                    DMA_stream_num_t stream,
+                                    DMA_channel_num_t channel,volatile uint32_t mem,
+                                    uint16_t bufflen,
+                                    uint32_t periph, 
+                                    DMA_interrupts_t interrupts, 
+                                    DMA_features_t features,
+                                    DMA_fifo_settings_t fifo_settings);
 
 
 
@@ -1347,9 +1347,9 @@ BAD_DMA_DEF void dma_setup_transfer(__IO DMA_typedef_t * DMA, DMA_stream_num_t s
 #ifdef BAD_HAL_USE_EXTI
 
 #ifdef BAD_EXTI_STATIC
-    #define BAD_EXTI_DEF static inline
+#define BAD_EXTI_DEF static inline
 #else
-    #define BAD_EXTI_DEF extern
+#define BAD_EXTI_DEF extern
 #endif
 
 typedef struct{
@@ -1377,13 +1377,13 @@ BAD_EXTI_DEF void exti_configure_line(uint8_t line, EXTI_trigger_t trigger)
     
     EXTI->RTSR &= ~(1 << line);
     EXTI->FTSR &= ~(1 << line);
-
+    
     
     if (trigger & EXTI_TRIGGER_RISING)
         EXTI->RTSR |= (1 << line);
     if (trigger & EXTI_TRIGGER_FALLING)
         EXTI->FTSR |= (1 << line);
-
+    
     // Unmask the interrupt
     EXTI->PR  |= (1 << line);
     EXTI->IMR |= (1 << line);
@@ -1418,9 +1418,9 @@ typedef enum{
 ALWAYS_STATIC void syscfg_set_exti_pin(SYSCFG_EXTI_port_t port, uint8_t pin){
     uint8_t crnum = pin >> 2;
     uint8_t shift = (pin & 0x3) << 2;
-
+    
     SYSCFG->EXTICR[crnum] &= ~(0xF << shift);
-
+    
     SYSCFG->EXTICR[crnum] |= port << shift;
 }
 
@@ -1430,9 +1430,9 @@ ALWAYS_STATIC void syscfg_set_exti_pin(SYSCFG_EXTI_port_t port, uint8_t pin){
 
 #ifndef BAD_TIMER_DEF
 #ifdef BAD_TIMER_STATIC
-    #define BAD_TIMER_DEF ALWAYS_STATIC
+#define BAD_TIMER_DEF ALWAYS_STATIC
 #else
-    #define BAD_TIMER_DEF extern
+#define BAD_TIMER_DEF extern
 #endif
 #endif
 
@@ -1565,13 +1565,13 @@ ALWAYS_STATIC void dbgmcu_freeze_apb2_periphals(__IO DBGMCU_typedef_t *dbgmcu, D
 
 void __attribute__((naked)) isr_hardfault(){ 
     __asm volatile(
-        "cpsid i        \n"
-        "tst lr,#4      \n"
-        "ite eq         \n"
-        "mrseq r0,msp   \n"
-        "mrsne r0,psp   \n"
-        "b hardfault_c  \n"
-    );
+                   "cpsid i        \n"
+                   "tst lr,#4      \n"
+                   "ite eq         \n"
+                   "mrseq r0,msp   \n"
+                   "mrsne r0,psp   \n"
+                   "b hardfault_c  \n"
+                   );
 }
 
 void __attribute__((used)) hardfault_c(uint32_t* stack){
@@ -1596,53 +1596,53 @@ void __attribute__((used)) hardfault_c(uint32_t* stack){
     uart_send_str_polling(FAULT_LOG_UART,"HARDFAULT\r\n");
     uart_send_str_polling(FAULT_LOG_UART, "R0 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r0);
- 
+    
     uart_send_str_polling(FAULT_LOG_UART, "R1 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r1);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "R2 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r2);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "R3 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r3);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "R12 = ");
     uart_send_hex_32bit(FAULT_LOG_UART, r12);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "LR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, lr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "!!PC = ");
     uart_send_hex_32bit(FAULT_LOG_UART, pc&~(0x1));
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "xPSR =  ");
     uart_send_hex_32bit(FAULT_LOG_UART, psr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "SP = ");
     uart_send_hex_32bit(FAULT_LOG_UART, (uint32_t)stack);
-
-
-
+    
+    
+    
     uart_send_str_polling(FAULT_LOG_UART, "CFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, cfsr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "HFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, hfsr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "DFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, dfsr);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "MMFAR = ");
     uart_send_hex_32bit(FAULT_LOG_UART, mmfar);
-
+    
     uart_send_str_polling(FAULT_LOG_UART,"BFAR = " );
     uart_send_hex_32bit(FAULT_LOG_UART, bfar);
-
+    
     uart_send_str_polling(FAULT_LOG_UART, "AFSR = ");
     uart_send_hex_32bit(FAULT_LOG_UART,afsr );
 #endif
     while (1) {
-    
+        
     }
 }
 
@@ -1734,21 +1734,21 @@ STRONG_ISR(dma2_stream2_isr){
         dma2_stream2_fe(DMA2->streams[2].NDTR);
 #endif
     }
-
+    
     if(DMA2->LISR & DMA_Stream2_direct_mode_error){
         DMA2->LIFCR |= DMA_Stream2_direct_mode_error;
 #ifdef BAD_DMA_DMA2_STREAM2_USE_DME
         dma2_stream2_dme(DMA2->streams[2].NDTR);
 #endif
     }
-
+    
     if(DMA2->LISR & DMA_Stream2_transfer_error){
         DMA2->LIFCR |= DMA_Stream2_transfer_error;
 #ifdef BAD_DMA_DMA2_STREAM2_USE_TE
         dma2_stream2_te(DMA2->streams[2].NDTR);
 #endif
     }
-
+    
     if(DMA2->LISR & DMA_Stream2_transfer_complete){
         
         DMA2->LIFCR|= DMA_Stream2_transfer_complete;
@@ -1756,7 +1756,7 @@ STRONG_ISR(dma2_stream2_isr){
         dma2_stream2_tc(DMA2->streams[2].NDTR);
 #endif
     }
-
+    
     if(DMA2->LISR & DMA_Stream2_half_transfer){
         DMA2->LIFCR |= DMA_Stream2_half_transfer;
 #ifdef BAD_DMA_DMA2_STREAM2_USE_HT
@@ -1860,37 +1860,37 @@ STRONG_ISR(exti9_5_isr){
         EXTI_PR_EXTI8 = 0x100,
         EXTI_PR_EXTI9 = 0x200
     };
-
+    
     uint32_t pending = EXTI->PR & (EXTI_PR_EXTI9_5_mask);
-
+    
     if(pending & EXTI_PR_EXTI5){
         EXTI->PR = EXTI_PR_EXTI5;
 #ifdef BAD_EXTI_USE_EXTI_5_USER_ISR        
         exti5_usr();
 #endif
     }
-
+    
     if(pending & EXTI_PR_EXTI6){
         EXTI->PR = EXTI_PR_EXTI6;
 #ifdef BAD_EXTI_USE_EXTI_6_USER_ISR
         exti6_usr();
 #endif
     }
-
+    
     if(pending & EXTI_PR_EXTI7){
         EXTI->PR = EXTI_PR_EXTI7;
 #ifdef BAD_EXTI_USE_EXTI_7_USER_ISR
         exti7_usr();
 #endif
     }
-
+    
     if(pending & EXTI_PR_EXTI8){
         EXTI->PR = EXTI_PR_EXTI8;
 #ifdef BAD_EXTI_USE_EXTI_8_USER_ISR
         exti8_usr();
 #endif
     }
-
+    
     if(pending & EXTI_PR_EXTI9){
         EXTI->PR = EXTI_PR_EXTI9;
 #ifdef BAD_EXTI_USE_EXTI_9_USER_ISR
@@ -1909,9 +1909,9 @@ void tim10_usr();
 #endif
 STRONG_ISR(tim1_up_tim10_isr){
     if(BTIM10->SR & TIM_SR_UIF ){
-      BTIM10->SR &= ~TIM_SR_UIF;
+        BTIM10->SR &= ~TIM_SR_UIF;
 #ifdef BTIMER_USE_TIM10_USR
-      tim10_usr();
+        tim10_usr();
 #endif
     } 
 }

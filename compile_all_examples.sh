@@ -6,7 +6,7 @@ opts=""
 src=""
 run_debug=""
 
-opts="-ggdb -mfloat-abi=hard -Wall -Wextra -fjump-tables -nolibc --specs=nosys.specs -nostartfiles  -I$code/inc/"
+opts="-ggdb -mfloat-abi=hard -Wall -Wextra -fjump-tables -nolibc --specs=nosys.specs -nostartfiles  -I$code/tests/ -I$code/inc/"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-for file in tests/*.c; do
+for file in examples/*.c; do
     out="build/$(basename "${file%.c}").elf"
     arm-none-eabi-gcc $opts -I"$code/inc" "$src" "$code/$file" -o "$out"
     if [ "$run_debug" = "true" ]; then 

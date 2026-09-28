@@ -1,7 +1,10 @@
 #pragma once
+#ifndef BAD_RTOS_PLATFORM_IMPLEMENTATION
+#include "badhal_h562.h"
+
 void __platform_setup();
 
-#ifdef BAD_RTOS_PLATFORM_IMPLEMENTATION
+#else
 
 #define BAD_USART_IMPLEMENTATION
 #define BAD_RCC_IMPLEMENTATION
@@ -40,13 +43,15 @@ void __platform_setup();
 
 #define BAD_RTOS_SETTINGS (USART_FEATURE_RECIEVE_EN|USART_FEATURE_TRANSMIT_EN)
 
-static inline void __main_clock_setup(){
+static inline void __main_clock_setup()
+{
     flash_acceleration_setup(FLASH_REGS,BAD_RTOS_FLASH_LATENCY, FLASH_PROGRAMMING_DELAY_2);
     pwr_setup_vos(PWR,PWR_VOS0);
     rcc_default_sysclock_setup(RCC);
 }
 
-static inline void __periph_setup(){
+static inline void __periph_setup()
+{
     rcc_set_ahb2_clocking(RCC,BAD_RTOS_AHB2_PERIPEHRALS);
     io_setup_pin(UART_GPIO_PORT, UART1_TX_PIN, MODER_af, UART1_TX_AF, OSPEEDR_high_speed, PUPDR_no_pull, OTYPR_push_pull);
     io_setup_pin(UART_GPIO_PORT, UART1_RX_PIN, MODER_af, UART1_RX_AF, OSPEEDR_high_speed, PUPDR_no_pull, OTYPR_push_pull);
@@ -55,29 +60,35 @@ static inline void __periph_setup(){
     rcc_set_apb1l_clocking(RCC,BAD_RTOS_APB1L_PERIPHERALS);
 }
 
-static inline void __tick_setup(){
+static inline void __tick_setup()
+{
     scb_set_core_interrupt_priority(SCB_SYSTICK_INTR,SCB_PRIO15);
     systick_setup(CLOCK_SPEED/1000, SYSTICK_FEATURE_CLOCK_SOURCE|SYSTICK_FEATURE_TICK_INTERRUPT);
     systick_enable();
 }
 
 #ifdef BAD_RTOS_ISR_TEST
-static inline void __timer_setup(){
+static inline void __timer_setup()
+{
     basic_timer_setup(BTIM6, BAD_BTIMER_TEST_ARR, BAD_BTIMER_TEST_PSC, BAD_BTIMER_TEST_INTR);
     nvic_set_interrupt_priority(TIM6_INTR,NVIC_PRIO14);
-    tim_enable(BTIM6);
     nvic_clear_interrupt(TIM6_INTR);
-    nvic_enable_interrupt(TIM6_INTR);
+    nvic_disable_interrupt(TIM6_INTR);
+    tim_enable(BTIM6);
     dbgmcu_freeze_apb1l_periphals(DBGMCU, DBGMCU_APB1L_TIM6);
 }
+
 void isr_test();
 
-void tim6_usr(){
+void tim6_usr()
+{
     isr_test();
 }
+
 #endif
 
-void __platform_setup(){
+void __platform_setup()
+{
     __main_clock_setup();
     __periph_setup();
     __tick_setup();
@@ -85,4 +96,8 @@ void __platform_setup(){
     __timer_setup();
 #endif
 }
+
 #endif
+
+#define BAD_PLATFORM_ISR_PERIPH_IRQN (TIM6_INTR - 16)
+#define BAD_PLATFORM_MPU_TEST_ADDR (&(BTIM6->CR1))

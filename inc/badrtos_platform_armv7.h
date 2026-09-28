@@ -1,3 +1,55 @@
+/*
+// ///DOC_COPY_START
+
+   * @file badrtos_armv7.h
+* @brief Header only rtos implementation
+*
+* Usage:
+*  - Include this file and define BAD_RTOS_IMPLEMENTATION in one
+*    C file
+*  - Change the config to your liking
+*  - Define the bad_user_init function and all the perliminary setup there, like task creation 
+*  - Call bad_rtos_start to start rtos operation
+* Notes:
+*  - Depends on the linker file , to port just edit the linker file adding nessesary sections at the beginning of ram :
+*     .kernel_bss (NOLOAD) : ALIGN(32)
+*    {
+*         __kernel_bss = .;
+*         *(.kernel_bss)
+*         __ekernel_bss = .;
+*    
+*     } > RAM
+*
+*     __rkernel_data = LOADADDR(.kernel_data);
+*
+*    .kernel_data : ALIGN(4) 
+*   {
+*     __kernel_data = .;
+*         *(.kernel_data)
+*     __ekernel_data = .;
+*   } > RAM AT > ROM
+*
+*    .static_stacks : ALIGN(4096)
+*   {
+*     __static_stacks = .;
+*         *(.static_stacks)
+*         __estatic_stacks = .;
+*   }
+*     .heap : ALIGN(32)
+*     {
+*         __heap = .;
+*         *(.kheap)
+*     } > RAM
+*
+*  - ! Kernel syscall interrupt priority is 0 on startup ,
+*      after startup it drops to lowest alowing isrs to run freely, 
+*      all the interaction between the kernel and isrs are done through pendsv triggering functions
+*      
+*  - !! If the task uses FPU make sure the stack size can accomodate additional 33 registers
+
+// ///DOC_COPY_END
+*/
+
 /* date = September 20th 2026 1:30 am */
 #ifndef BAD_RTOS_PLATFORM_ARMV7_H
 #define BAD_RTOS_PLATFORM_ARMV7_H
@@ -5,6 +57,8 @@
 #ifndef BAD_RTOS_H
 # error "Platform should not be included independently"
 #endif
+
+// ///CODE_COPY_START
 
 #define BAD_RTOS_ASM_LOAD_PSPLIM
 
@@ -37,8 +91,8 @@ typedef struct
 typedef enum
 {
     BAD_SCB_MEMORY_MANAGEMENT_INTR = 0,
-    BAD_SCB_BUS_FAULT_INTR=1,
-    BAD_SCB_USAGE_FAULT_INTR=2,
+    BAD_SCB_BUS_FAULT_INTR = 1,
+    BAD_SCB_USAGE_FAULT_INTR  = 2,
     BAD_SCB_SVC_INTR = 7,
     BAD_SCB_DEBUG_MONITOR_INTR = 8,
     BAD_SCB_PENDSV_INTR = 10,
@@ -68,11 +122,13 @@ typedef enum
 static inline void __scb_trigger_pendsv()
 {
     BAD_SCB->ICSR = BAD_SCB_ICSR_PENDSVSET;
+    __dsb();
 }
 
 static inline void __scb_set_core_interrupt_priority(bad_scb_core_interrupt_t intr, bad_scb_interrupt_priority_t prio)
 {
-    BAD_SCB->SHP[intr] = prio << (8U - BAD_RTOS_PRIO_BITS);
+    BAD_SCB->SHP[intr] = prio << (8 - BAD_RTOS_PRIO_BITS);
+    __dsb();
 }
 
 static inline void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms)
@@ -82,6 +138,106 @@ static inline void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms
     __dsb();
     __isb();
 } 
+
+static inline void __scb_enable_fault(bad_scb_core_interrupt_t intr)
+{
+    BAD_SCB->SHCSR |= 1U << (16 + intr);
+    __dsb();
+}
+
+static inline void __scb_disable_fault(bad_scb_core_interrupt_t intr)
+{
+    BAD_SCB->SHCSR &= ~(1U << (16 + intr));
+    __dsb();
+}
+
+static inline void __scb_pend_fault(bad_scb_core_interrupt_t intr)
+{
+    u32 bit = intr;
+    
+    if(intr == BAD_SCB_USAGE_FAULT_INTR)
+        bit++;
+    
+    BAD_OPT_BARRIER;
+    BAD_SCB->SHCSR |= 1U << bit;
+    __dsb();
+}
+
+static inline void __scb_clear_fault(bad_scb_core_interrupt_t intr)
+{
+    u32 bit = intr;
+    
+    if(intr == BAD_SCB_USAGE_FAULT_INTR)
+        bit++;
+    
+    BAD_OPT_BARRIER;
+    BAD_SCB->SHCSR &= ~(1U << bit);
+    __dsb();
+}
+
+
+typedef struct
+{
+    volatile u32 ISER[8U];              
+    u32 RESERVED0[24U];
+    volatile u32 ICER[8U];               
+    u32 RESERVED1[24U];
+    volatile u32 ISPR[8U];               
+    u32 RESERVED2[24U];
+    volatile u32 ICPR[8U];               
+    u32 RESERVED3[24U];
+    volatile u32 IABR[8U];               
+    u32 RESERVED4[56U];
+    volatile u8 IP[240U];               
+    u32 RESERVED5[644U];
+    volatile u32 STIR;                   
+} bad_nvic_typedef_t;
+
+#define BAD_NVIC_BASE (0xE000E100UL)
+
+#define BAD_NVIC ((bad_nvic_typedef_t *) BAD_NVIC_BASE)
+
+static inline void __nvic_enable_interrupt(u32 intrnum)
+{
+    u8 ISER_idx = intrnum >> 5; //deside the register by dividing by 32 
+    u32 ISER_intr_mask = 1 << (intrnum & 0x1F); // the remainder will be the bit number to which we should write
+    BAD_OPT_BARRIER;
+    BAD_NVIC->ISER[ISER_idx] = ISER_intr_mask;
+    __dsb();
+}
+
+static inline void __nvic_disable_interrupt(u32 intrnum)
+{
+    u8 ICER_idx = intrnum >> 5;
+    u32 ICER_intr_mask = 1 << (intrnum & 0x1F);
+    BAD_OPT_BARRIER;
+    BAD_NVIC->ICER[ICER_idx] = ICER_intr_mask;
+    __dsb();
+} 
+
+static inline void __nvic_pend_interrupt(u32 intrnum)
+{
+    u8 ISPR_idx = intrnum >> 5;
+    u32 ISPR_intr_mask = 1 << (intrnum & 0x1F);
+    BAD_OPT_BARRIER;
+    BAD_NVIC->ISPR[ISPR_idx] = ISPR_intr_mask;
+    __dsb();
+}
+
+static inline void __nvic_clear_interrupt(u32 intrnum)
+{
+    u8 ICPR_idx = intrnum >> 5;
+    u32 ICPR_intr_mask = 1 << (intrnum & 0x1F);
+    BAD_OPT_BARRIER;
+    BAD_NVIC->ICPR[ICPR_idx] = ICPR_intr_mask;
+    __dsb();
+}
+
+static inline void __nvic_set_interrupt_priority(u32 intrnum, u8 prio)
+{
+    BAD_NVIC->IP[intrnum] = prio << (8 - BAD_RTOS_PRIO_BITS);
+    __dsb();
+}
 
 #ifdef BAD_RTOS_USE_FPU
 
@@ -95,7 +251,7 @@ typedef struct
 } bad_fpu_typedef_t;
 
 #define BAD_FPU_BASE (0xE000EF34UL)
-#define BAD_FPU ((volatile bad_fpu_typedef_t *)BAD_FPU_BASE)
+#define BAD_FPU ((bad_fpu_typedef_t *)BAD_FPU_BASE)
 
 typedef enum 
 {
@@ -227,7 +383,7 @@ static inline void __mpu_default_init()
     __mpu_enable_with_default_map();
 }
 
-static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb,bad_task_descr_t *descr)
+static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const bad_task_descr_t *descr)
 {
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
@@ -381,5 +537,7 @@ static inline void __mpu_kernel_region_restore_lock(u32 key)
 }
 
 #endif
+
+// ///CODE_COPY_END
 
 #endif //BADRTOS_PLATFORM_ARMV7_H

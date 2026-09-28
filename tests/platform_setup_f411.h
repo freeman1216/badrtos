@@ -1,6 +1,7 @@
 #pragma once
 void __platform_setup();
-
+void __platform_start_isr_test();
+void __platform_pause_isr_test();
 
 #ifdef BAD_RTOS_PLATFORM_IMPLEMENTATION
 
@@ -63,7 +64,7 @@ static inline void __timer_setup(){
     nvic_set_interrupt_priority(NVIC_TIM1_UP_TIM10_INTR,NVIC_PRIO14);
     tim_enable(BTIM10);
     nvic_clear_interrupt(NVIC_TIM1_UP_TIM10_INTR);
-    nvic_enable_interrupt(NVIC_TIM1_UP_TIM10_INTR);
+    nvic_disable_interrupt(NVIC_TIM1_UP_TIM10_INTR);
     dbgmcu_freeze_apb2_periphals(DBGMCU, DBGMCU_APB2_TIM10);
 }
 
@@ -72,6 +73,17 @@ void isr_test();
 void tim10_usr(){
     isr_test();
 }
+
+void __platform_start_isr_test()
+{
+    nvic_enable_interrupt(NVIC_TIM1_UP_TIM10_INTR);
+}
+
+void __platform_pause_isr_test()
+{
+    nvic_disable_interrupt(NVIC_TIM1_UP_TIM10_INTR);
+}
+
 #endif
 
 
@@ -83,4 +95,6 @@ void __platform_setup() {
     __timer_setup();
 #endif
 }
+
+
 #endif

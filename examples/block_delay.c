@@ -1,6 +1,7 @@
-#define BAD_RTOS_PLATFORM_IMPLEMENTATION
 #define BAD_RTOS_IMPLEMENTATION
-#include "platform_include.h"
+#include "badrtos_split.h"
+
+#include "test_platforms/platform_setup.h" 
 
 bad_task_handle_t task1h;
 bad_task_handle_t task2h;
@@ -9,8 +10,8 @@ uint32_t unblocked;
 
 void cb(bad_task_handle_t unused0, void* unused1)
 {
-    UNUSED(unused0);
-    UNUSED(unused1);
+    (void)unused0;
+    (void)unused1;
     callback_hit++;
 }
 
@@ -87,7 +88,7 @@ bad_rtos_status_t bad_user_init()
 
 int __attribute__((noinline)) main()
 {
-    __platform_setup();
+    __platform_base_setup();
     bad_rtos_start();
     
     while(1)

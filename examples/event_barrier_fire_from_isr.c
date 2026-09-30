@@ -1,7 +1,7 @@
-#define BAD_RTOS_ISR_TEST
-#define BAD_RTOS_PLATFORM_IMPLEMENTATION
 #define BAD_RTOS_IMPLEMENTATION
-#include "platform_include.h"
+#include "badrtos_split.h"
+
+#include "test_platforms/platform_setup.h" 
 
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
 bad_task_handle_t task1h;
@@ -68,9 +68,10 @@ bad_rtos_status_t bad_user_init()
 
 int __attribute__((noinline)) main()
 {
-    __platform_setup();
+    __platform_base_setup();
     
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
+    __platform_periodic_irq_setup(isr_test);
     bad_rtos_start();
 #endif
     

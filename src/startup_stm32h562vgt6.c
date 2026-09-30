@@ -22,7 +22,6 @@ typedef void (*constructor_ptr)();
 extern constructor_ptr __init_array[];
 extern constructor_ptr __einit_array[];
 
-
 extern int main();
 
 void default_isr(){

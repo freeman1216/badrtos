@@ -339,9 +339,12 @@ static inline void __mpu_enable_with_default_map()
 }
 
 static inline u32 __mpu_find_size(u32 bytes, bool round_up)
-{
+{ 
+    
+    
     u32 msb = 31 - __builtin_clz(bytes);
-    msb += ((1U << msb) == bytes) * round_up;
+    msb += ((1U << msb) != bytes) * round_up;
+    
     return (msb - 1) << 1;
 }
 
@@ -388,10 +391,12 @@ static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const b
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
     //Stack region
-    u32 addr_cast = (u32)tcb->stack;
-    bad_mpu_region_t *stack_region = &tcb->regions[0];
-    stack_region->__reg0 = addr_cast | BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(4);
-    stack_region->__reg1 = BAD_RTOS_STACK_RASR;
+    {
+        u32 addr_cast = (u32)tcb->stack;
+        bad_mpu_region_t *stack_region = &tcb->regions[0];
+        stack_region->__reg0 = addr_cast | BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(4);
+        stack_region->__reg1 = BAD_RTOS_STACK_RASR;
+    }
     
     { //User regions
         u32 i = 1;
@@ -406,10 +411,17 @@ static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const b
                 if(user_region->type == BAD_MPU_REGION_NONE)
                     break;
                 
-                if((addr_cast - 1) & addr_cast)
+                u32 size = user_region->size > 32 ? user_region->size : 32;
+                u32 size_msb = 32 - __builtin_clz(size - 1);
+                
                 {
-                    ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
-                    goto exit;
+                    u32 addr_lowest_bit = __builtin_ctz(addr_cast);
+                    
+                    if(!user_region->addr || addr_lowest_bit < size_msb)
+                    {
+                        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+                        goto exit;
+                    }
                 }
                 
                 if(user_region->type < BAD_MPU_REGION_MAX)
@@ -498,7 +510,7 @@ static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const b
                     reg0_mask |= BAD_MPU_RBAR_VALID | BAD_MPU_RBAR_REGION(i);
                     
                     region->__reg0 = addr_cast | reg0_mask;
-                    region->__reg1 = __mpu_find_size(user_region->size,true) | reg1_mask;
+                    region->__reg1 = ((size_msb - 1) << 1) | reg1_mask | BAD_MPU_RASR_ENABLE;
                 }
                 else
                 {

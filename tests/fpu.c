@@ -1,4 +1,4 @@
-#include "platform_include.h"
+#include "badrtos_split.h"
 #include "runner.h"
 
 #ifdef BAD_RTOS_USE_FPU

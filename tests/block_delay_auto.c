@@ -1,4 +1,4 @@
-#include "platform_include.h"
+#include "badrtos_split.h"
 #include "runner.h"
 
 #define TASK1_PRIORITY 1 

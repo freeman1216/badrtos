@@ -1,8 +1,7 @@
-#define BAD_RTOS_ISR_TEST
 #define BAD_RTOS_IMPLEMENTATION
-#define BAD_RTOS_PLATFORM_IMPLEMENTATION
-#include "platform_include.h"
+#include "badrtos_split.h"
 
+#include "test_platforms/platform_setup.h"
 #include "runner.h"
 
 #define MEMMANAGE_IRQN (-16)
@@ -73,6 +72,14 @@ void isr_test()
         bad_test_fail();
 }
 
+void timeout_handler()
+{
+    while(1)
+    {
+        
+    }
+}
+
 __attribute__((naked))
 void memmanage_isr(void)
 {
@@ -114,7 +121,9 @@ void runner_task(void *unused)
 {
     (void)unused;
     
-    if(irq_acquire(BAD_PLATFORM_ISR_PERIPH_IRQN) != BAD_RTOS_STATUS_OK)
+    u32 periodic_irqn = __platform_get_periodic_irqn();
+    
+    if(irq_acquire(periodic_irqn) != BAD_RTOS_STATUS_OK)
         bad_test_fail();
     
     if(irq_acquire(MEMMANAGE_IRQN) != BAD_RTOS_STATUS_OK)
@@ -122,6 +131,8 @@ void runner_task(void *unused)
     
     BAD_ITER_SECTION_ITER_ALL(tests,bad_test_case_t,current_testcase)
     {
+        if(current_testcase->init_func)
+            current_testcase->init_func();
         if(current_testcase->task1_descr) 
             task1h = task_make(current_testcase->task1_descr);
         if(current_testcase->task2_descr)
@@ -130,8 +141,8 @@ void runner_task(void *unused)
             task3h = task_make(current_testcase->task3_descr);
         if(current_testcase->isr_test_func)
         {
-            irq_clear(BAD_PLATFORM_ISR_PERIPH_IRQN);
-            irq_enable(BAD_PLATFORM_ISR_PERIPH_IRQN);
+            irq_clear(periodic_irqn);
+            irq_enable(periodic_irqn);
         }
         if(current_testcase->memfault_func)
         {
@@ -147,12 +158,15 @@ void runner_task(void *unused)
         }
         
         bad_test_init(current_testcase->num_testcases);
+        
+        __platform_start_timeout();
         task_block();
+        __platform_pause_timeout();
         
         if(current_testcase->isr_test_func)
         {
-            irq_clear(BAD_PLATFORM_ISR_PERIPH_IRQN);
-            irq_disable(BAD_PLATFORM_ISR_PERIPH_IRQN);
+            irq_clear(periodic_irqn);
+            irq_disable(periodic_irqn);
         }
         if(current_testcase->memfault_func)
         {
@@ -183,12 +197,24 @@ void unblocker_task(void *unused)
 
 bad_rtos_status_t bad_user_init()
 {
+    const bad_mpu_user_region_t runner_regions[] = 
+    {
+        {
+            .addr = __platform_get_timeout_timer_addr(),
+            .size = __platform_get_timeout_timer_size(),
+            .type = BAD_MPU_REGION_DEVICE_NGRE,
+            .settings = BAD_MPU_PRIV_RW_UNPRIV_RW | BAD_MPU_EXECUTE_NEVER,
+        },
+        {0}
+    };
+    
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
     bad_task_descr_t runner_descr = {
         .stack = runner_task_stack,
         .stack_size = RUNNER_STACK_SIZE,
         .entry = runner_task,
+        .regions = runner_regions,
         .ticks_to_change = UINT32_MAX,
         .base_priority = RUNNER_PRIORITY,
     };
@@ -218,7 +244,9 @@ bad_rtos_status_t bad_user_init()
 
 int __attribute__((noinline)) main()
 {
-    __platform_setup();
+    __platform_base_setup();
+    __platform_timeout_setup(timeout_handler);
+    __platform_periodic_irq_setup(isr_test);
     
     bad_rtos_start();
     

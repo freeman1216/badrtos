@@ -1381,9 +1381,20 @@ typedef enum{
     BTIMER_UPDATE = 0x1,
 }BTIMER_interrupts_t;
 
+typedef enum{
+    BTIMER_FEATURE_UDIS = 0x2,
+    BTIMER_FEATURE_URS = 0x4,
+    BTIMER_FEATURE_OPM = 0x8,
+    BTIMER_FEATURE_APRE = 0x80,
+    BTIMER_FEATURE_UIFREMAP = 0x800,
+    BTIMER_FEATURE_DITHEN  = 0x1000,
+}BTIMER_features_t;
+
 #define BTIM6_BASE 0x40001000UL
+#define BTIM7_BASE 0x40001400UL 
 
 #define BTIM6 ((__IO BTIMER_typedef_t *)BTIM6_BASE)
+#define BTIM7 ((__IO BTIMER_typedef_t *)BTIM7_BASE)
 
 #define TIM_CR_CEN 0x1
 
@@ -1397,15 +1408,23 @@ ALWAYS_STATIC void tim_disable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 &= ~TIM_CR_CEN;
 }
 
-BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
+ALWAYS_STATIC void tim_set_cnt(__IO BTIMER_typedef_t* TIM,uint16_t count)
+{
+    TIM->CNT = count;
+}
+
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM, BTIMER_features_t features,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
 #ifdef BAD_BTIMER_IMPLEMENTATION
-BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,BTIMER_features_t features,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
+    TIM->CR1 = features;
     TIM->ARR = barr;
     TIM->PSC = bpsc; 
     TIM->EGR = 1;
     TIM->DIER = intr;
     TIM->SR &= ~TIM_SR_UIF;
 }
+
+
 #endif
 
 #endif // BAD_HAL_USE_BTIMER
@@ -1636,6 +1655,16 @@ void tim6_usr();
 STRONG_ISR(tim6_isr){
     BTIM6->SR &= ~TIM_SR_UIF;
     tim6_usr();
+}
+
+#endif
+
+#ifdef BTIMER_TIM7_ISR_IMPLEMENTATION
+void tim7_usr();
+
+STRONG_ISR(tim7_isr){
+    BTIM7->SR &= ~TIM_SR_UIF;
+    tim7_usr();
 }
 
 #endif

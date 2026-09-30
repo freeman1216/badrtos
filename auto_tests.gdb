@@ -48,6 +48,16 @@ commands
     quit 2
 end
 
+# Timeout reached
+break timeout_handler
+commands
+    silent
+    printf "TEST FAIL: timeout reached\n\n"
+    info symbol current_testcase->test_name
+    bt
+    quit 2
+end
+
 run
 
 printf "TEST FAIL: Target halted unexpectedly\n\n"

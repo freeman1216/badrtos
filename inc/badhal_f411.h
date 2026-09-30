@@ -731,15 +731,15 @@ typedef struct {
     __IO uint32_t CTRL;                   
     __IO uint32_t LOAD;                   
     __IO uint32_t VAL;                    
-    __IO  uint32_t CALIB;                  
+    __IO uint32_t CALIB;                  
 } Systick_typedef_t;
 
 #define SYSTICK_BASE (0xE000E010UL)
 
 #define SYSTICK ((Systick_typedef_t *)SYSTICK_BASE)
 
-
 #define SysTick_CTRL_ENABLE 0x1                                           
+
 typedef enum{
     SYSTICK_FEATURE_TICK_INTERRUPT = 0x2, 
     SYSTICK_FEATURE_CLOCK_SOURCE = 0x4,
@@ -1141,7 +1141,6 @@ BAD_SPI_DEF void spi_transmit_only(__IO SPI_typedef_t *SPI, uint8_t data);
 
 #ifdef BAD_SPI_IMPLEMENTATION
 
-
 BAD_SPI_DEF void spi_enable(__IO SPI_typedef_t* SPI){
     SPI->CR1 |= SPI_CR1_SPIEN_MASK;
     while (!(SPI->CR1 & SPI_CR1_SPIEN_MASK));
@@ -1153,7 +1152,6 @@ BAD_SPI_DEF void spi_disable(__IO SPI_typedef_t* SPI){
     SPI->CR1 &= ~(SPI_CR1_SPIEN_MASK);
     while (SPI->CR1 & SPI_CR1_SPIEN_MASK); 
 }
-
 
 BAD_SPI_DEF uint8_t spi_transmit_recieve(__IO SPI_typedef_t *SPI, uint8_t data){
     SPI->DR = data;
@@ -1457,9 +1455,18 @@ typedef enum{
     BTIMER_CC = 0x2
 }BTIMER_interrupts_t;
 
+typedef enum{
+    BTIMER_FEATURE_UDIS = 0x2,
+    BTIMER_FEATURE_URS = 0x4,
+    BTIMER_FEATURE_OPM = 0x8,
+    BTIMER_FEATURE_APRE = 0x80,
+}BTIMER_features_t;
+
 #define BTIM10_BASE 0x40014400UL
+#define BTIM11_BASE 0x40014800UL
 
 #define BTIM10 ((__IO BTIMER_typedef_t *)BTIM10_BASE)
+#define BTIM11 ((__IO BTIMER_typedef_t *)BTIM11_BASE)
 
 #define TIM_CR_CEN 0x1
 
@@ -1473,9 +1480,15 @@ ALWAYS_STATIC void tim_disable(__IO BTIMER_typedef_t* TIM){
     TIM->CR1 &= ~TIM_CR_CEN;
 }
 
-BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
-#ifdef BAD_TIMER_IMPLEMENTATION
-BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
+ALWAYS_STATIC void tim_set_cnt(__IO BTIMER_typedef_t* TIM,uint16_t count)
+{
+    TIM->CNT = count;
+}
+
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM, BTIMER_features_t features,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr);
+#ifdef BAD_BTIMER_IMPLEMENTATION
+BAD_TIMER_DEF void basic_timer_setup(__IO BTIMER_typedef_t* TIM,BTIMER_features_t features,uint16_t barr,uint16_t bpsc, BTIMER_interrupts_t intr){
+    TIM->CR1 = features;
     TIM->ARR = barr;
     TIM->PSC = bpsc; 
     TIM->EGR = 1;
@@ -1908,14 +1921,28 @@ STRONG_ISR(exti9_5_isr){
 void tim10_usr();
 #endif
 STRONG_ISR(tim1_up_tim10_isr){
-    if(BTIM10->SR & TIM_SR_UIF ){
+    if(BTIM10->SR & TIM_SR_UIF){
         BTIM10->SR &= ~TIM_SR_UIF;
 #ifdef BTIMER_USE_TIM10_USR
         tim10_usr();
 #endif
     } 
 }
+#endif
 
+#ifdef BTIMER_TIM1_TRG_COM_TIM11_ISR_IMPLEMENTATION
+
+#ifdef BTIMER_USE_TIM11_USR
+void tim11_usr();
+#endif
+STRONG_ISR(tim1_trg_com_tim11_isr){
+    if(BTIM11->SR & TIM_SR_UIF){
+        BTIM11->SR &= ~TIM_SR_UIF;
+#ifdef BTIMER_USE_TIM11_USR
+        tim10_usr();
+#endif
+    } 
+}
 #endif
 
 #endif // !BAD_HAL_H

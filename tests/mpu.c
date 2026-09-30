@@ -1,4 +1,5 @@
-#include "platform_include.h"
+#include "badrtos_split.h"
+#include "test_platforms/platform_setup.h"
 #include "runner.h"
 
 #define TASK1_PRIORITY 1 
@@ -7,6 +8,9 @@ extern u8 __kernel_bss;
 
 static volatile u32 seq;
 static volatile u32 fault_count;
+static u8 *mpu_test_addr;
+
+static bad_mpu_user_region_t task1r[];
 
 static void memfault_func()
 {
@@ -31,7 +35,7 @@ static void task1(void *unused)
     else
         bad_test_fail();
     
-    u32 allowed_read = *BAD_PLATFORM_MPU_TEST_ADDR;
+    u8 allowed_read = *mpu_test_addr;
     
     if(fault_count == 3)
         bad_test_fail();
@@ -41,12 +45,18 @@ static void task1(void *unused)
     task_finish();
 }
 
-static const bad_mpu_user_region_t task1r[] = {
+static void init_func()
+{
+    mpu_test_addr = task1r[0].addr = __platform_get_mpu_test_region_addr();
+    task1r[0].size = __platform_get_mpu_test_region_size();
+}
+
+static bad_mpu_user_region_t task1r[] = {
     {
-        .addr = (u8 *) BAD_PLATFORM_MPU_TEST_ADDR,
+        .addr = 0,
         .type = BAD_MPU_REGION_DEVICE_NGRE,
         .settings = BAD_MPU_PRIV_RW_UNPRIV_RW | BAD_MPU_EXECUTE_NEVER,
-        .size = 32
+        .size = 0
     },
     {0},
 };
@@ -61,6 +71,7 @@ static const bad_task_descr_t task1_descr = {
 };
 
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,mpu_test) = {
+    .init_func = init_func, 
     .task1_descr = &task1_descr,
     .memfault_func = memfault_func,
     .num_testcases = 3,

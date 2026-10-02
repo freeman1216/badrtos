@@ -1539,7 +1539,8 @@ static inline u32 in_task()
 }
 
 // Misc
-#define BAD_CONTAINER_OF(ptr, type, member) ({ \
+#define BAD_CONTAINER_OF(ptr, type, member) \
+({ \
 _Static_assert(__builtin_types_compatible_p(typeof(*(ptr)), typeof(((type *)0)->member)), \
 "Pointer type mismatch in container_of"); \
 ((type *)( (char *)(ptr) - __builtin_offsetof(type, member) ));\
@@ -1664,8 +1665,23 @@ extern bad_rtos_status_t irq_release(s32 irqn);
 extern void preempt_disable();
 extern void preempt_enable();
 
+#define POOL_DECLARE_TYPE(name,type,count) \
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+u8 __attribute__((aligned(_Alignof(type)))) name##_mem[sizeof(type) * (count)];\
+bad_pool_t name = {.mem = name##_mem,.block_size = sizeof(type),.size_in_bytes = sizeof(type) * (count)};
+
+#define POOL_DECLARE_TYPE_STATIC(name,type,count) \
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+static u8 __attribute__((aligned(_Alignof(type)))) name##_mem[sizeof(type) * (count)];\
+static bad_pool_t name = {.mem = name##_mem,.block_size = sizeof(type),.size_in_bytes = sizeof(type) * (count)};
+
 #define POOL_DECLARE(name,__mem,__block_size,__size_in_bytes)\
-bad_pool_t name = {.mem = __mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes}
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+bad_pool_t name = {.mem = (u8 *)__mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes};
+
+#define POOL_DECLARE_STATIC(name,__mem,__block_size,__size_in_bytes)\
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+static bad_pool_t name = {.mem = (u8 *)__mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes};
 
 extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes);
 extern void* pool_alloc(bad_pool_t *pool);
@@ -1731,7 +1747,7 @@ extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void 
 })
 
 #define EVENT_BARRIER_GET_ERROR(flags) ({\
-((flags) & EVENT_BARRIER_FLAGS_VALID_MASK) ? BAD_RTOS_STATUS_OK : ((flags) ^ EVENT_BARRIER_FLAGS_VALID_MASK );\
+((flags) & EVENT_BARRIER_FLAGS_VALID_MASK) ? BAD_RTOS_STATUS_OK : (flags);\
 })
 
 extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count);
@@ -1842,7 +1858,7 @@ _Static_assert( 1
                ,"What have i done #2");
 
 static u8  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES];
-static bad_pool_t gpool;
+static bad_pool_t gpool; //Not initialsed to prevent isrs from generating events before the kernel has started
 
 #ifdef BAD_RTOS_USE_KHEAP
 typedef struct 
@@ -1921,11 +1937,11 @@ extern u8 __heap;
 extern u8 __dma_buffs;
 
 // ///CODE_REPLACE_START
-#ifdef BAD_PLATFORM_F411
+#ifdef BAD_PLATFORM_ARMV7
 #include "badrtos_platform_armv7.h"
 #endif
 
-#ifdef BAD_PLATFORM_H562
+#ifdef BAD_PLATFORM_ARMV8
 #include "badrtos_platform_armv8.h"
 #endif
 // ///CODE_REPLACE_END
@@ -1976,10 +1992,9 @@ static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
     
     u32 splits = idx - picked_idx;
     u8 *block_for_split = (u8 *)cb->free_list[picked_idx].next;
+    dlist_remove(cb->free_list[picked_idx].next);
     
-    cb->free_list[picked_idx].next = cb->free_list[picked_idx].next->next;
-    cb->free_list[picked_idx].next->prev = &cb->free_list[picked_idx];
-    cb->heads_bmask ^= (u32)(&cb->free_list[idx] == cb->free_list[idx].next) << picked_idx;
+    cb->heads_bmask ^= (u32)(&cb->free_list[picked_idx] == cb->free_list[picked_idx].next) << picked_idx;
     
     u32 splited_block_size = 1 << (cb->max_order - picked_idx-1);
     
@@ -2016,11 +2031,8 @@ static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
 
 static void __buddy_free(bad_buddy_t *cb,void *block,u32 order )
 {
-    
     if(order > cb->max_order)
-    {
         return;
-    }
     
     u32 curr_order = order; 
     void *curr_block = block;
@@ -2039,9 +2051,7 @@ static void __buddy_free(bad_buddy_t *cb,void *block,u32 order )
         cb->bmask[bmask_word] ^= 1ULL << bmask_bit;
         
         if(cb->bmask[bmask_word] & 1ULL << bmask_bit)
-        {
             break;
-        }
         
         u32 buddy_offset = offset_from_base ^ buddy_bitmask;
         u32 parent_offset = offset_from_base &(~buddy_bitmask);
@@ -2063,10 +2073,6 @@ static void __buddy_free(bad_buddy_t *cb,void *block,u32 order )
     
     cb->heads_bmask |= 1 << idx;
 }
-
-#endif
-
-#ifdef BAD_RTOS_USE_KHEAP
 
 BAD_RTOS_STATIC void* __kernel_alloc(u32 size)
 {
@@ -3235,7 +3241,7 @@ BAD_RTOS_STATIC void __msgq_timeout_cb(bad_task_handle_t handle ,void *msgq)
 
 BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire_allocate(bad_msgq_t *q,u32 capacity)
 {
-    if(!q || (capacity & (capacity - 1)))
+    if(!q || q->capacity_mask || (capacity & (capacity - 1)))
     {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
@@ -3500,6 +3506,11 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut)
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     
+    if(!mut->blockedq.next)
+    {
+        return BAD_RTOS_STATUS_NOT_INITIALISED;
+    }
+    
     if(kernel_cb.curr != mut->owner)
     {
         return BAD_RTOS_STATUS_NOT_OWNER;
@@ -3515,15 +3526,8 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut)
     __synchro_wake_all(&mut->blockedq,__mutex_timeout_cb,BAD_RTOS_STATUS_DELETED);
     
     *mut = (bad_mutex_t){0};
-    mut->blockedq = DLIST_INITIALISER(mut->blockedq);
     
     return BAD_RTOS_STATUS_OK;
-}
-
-BAD_RTOS_STATIC void __mutex_update_owner_pos(bad_tcb_t *owner)
-{
-    if(__readyq_dequeue(owner) == BAD_RTOS_STATUS_OK)
-        __readyq_enqueue(owner);
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, u32 delay)
@@ -3531,6 +3535,11 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, u32 delay)
     if(!mut)
     {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
+    }
+    
+    if(!mut->blockedq.next)
+    {
+        return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
     if(!mut->owner)
@@ -3548,8 +3557,12 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, u32 delay)
     
     if(kernel_cb.curr->raised_priority < mut->owner->raised_priority)
     {
+        bad_rtos_status_t ret = __readyq_dequeue(mut->owner); 
+        
         mut->owner->raised_priority = kernel_cb.curr->raised_priority;
-        __mutex_update_owner_pos(mut->owner);
+        
+        if(ret == BAD_RTOS_STATUS_OK)
+            __readyq_enqueue(mut->owner);
     }
     
     return __synchro_block(&mut->blockedq,__mutex_timeout_cb,delay, BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
@@ -3560,6 +3573,11 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut)
     if(!mut)
     {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
+    }
+    
+    if(!mut->blockedq.next)
+    {
+        return BAD_RTOS_STATUS_NOT_INITIALISED;
     }
     
     if(kernel_cb.curr!= mut->owner)
@@ -3638,11 +3656,6 @@ BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem)
     if(!sem->init_flag)
     {
         return BAD_RTOS_STATUS_NOT_INITIALISED;
-    }
-    
-    if(!sem->blockedq.next)
-    {
-        return BAD_RTOS_STATUS_OK;
     }
     
     __synchro_wake_all(&sem->blockedq,__sem_timeout_cb,BAD_RTOS_STATUS_DELETED);
@@ -3742,7 +3755,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __sem_take(bad_sem_t *sem, u32 delay)
     {
         counter = __ldrex(&sem->counter);
     }
-    while(__strex(counter-1, &sem->counter));
+    while(__strex(counter - 1, &sem->counter));
     
     return BAD_RTOS_STATUS_OK;
 } 
@@ -3987,7 +4000,7 @@ static void __attribute__((used)) __svc_c(u8 svc, u32* stack)
         case 0x6:
         {
             __task_block();            
-            stack[0] = BAD_RTOS_STATUS_OK;
+            stack[0] = BAD_RTOS_STATUS_WOKEN;
         }break;
         
         case 0x7:
@@ -4726,7 +4739,7 @@ __asm__(
 __asm__(
         ".thumb_func                    \n"
         ".global msgq_release_deallocate\n"
-        "msgq_release_dealocate:        \n"
+        "msgq_release_deallocate:       \n"
         "svc 0x15                       \n"
         "bx lr                          \n"
         );

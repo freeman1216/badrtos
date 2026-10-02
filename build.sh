@@ -2,24 +2,17 @@
 
 set -xe
 code="$PWD"
-
-options="-ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard -nolibc --specs=nosys.specs -nostartfiles -I$code/tests -I$code/inc/"
+opts="-ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard -nolibc --specs=nosys.specs -nostartfiles -I$code/tests -I$code/inc/"
 added_opts=""
 optimisation=""
 src=""
 example_src=""
 run_debug=""
+platform=""
+matched_dir=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        f411)
-            added_opts="-DBAD_PLATFORM_F411 -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -Tstm32f411ceu6.ld" 
-            src="$code/src/startup_stm32f411ceu6.c $code/tests/test_platforms/platform_setup_f411.c"
-            ;;
-        h562)
-            added_opts="-DBAD_PLATFORM_H562 -mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -Tstm32h562vgt6.ld" 
-            src="$code/src/startup_stm32h562vgt6.c $code/tests/test_platforms/platform_setup_h562.c"
-            ;;
         opts)
             optimisation="-O2"
             ;;
@@ -78,16 +71,35 @@ while [ $# -gt 0 ]; do
             example_src="$code/examples/buddy.c"
             ;;
         *)
-            echo "Platform not supported"
-            exit -1
+            platform="$1"
             ;;
     esac
     shift
 done
 
-arm-none-eabi-gcc $added_opts $options $optimisation -I$code/inc/ $src $example_src  -o build/out.elf
+if [ "$platform" = "" ]; then
+    echo "Error : No platform provided"
+    exit 1
+fi
 
-if [ $run_debug = "true" ]; then 
+for dir in "$code/tests/test_platforms"/*"$platform"*; do
+    if [ -d "$dir" ]; then
+        matched_dir="$dir"
+        break
+    fi
+done
+
+if [ -n "$matched_dir" ]; then
+    added_opts="$(cat "$matched_dir/platform.cflags")"
+    src="$matched_dir/*.c"
+else
+    echo "Error: Platform or option '$platform' not supported"
+    exit 1
+fi
+
+arm-none-eabi-gcc $opts -L$matched_dir $added_opts $optimisation $src $example_src -o build/out.elf
+
+if [ "$run_debug" = "true" ]; then 
     gf-svd build/out.elf \
         -ex "target extended-remote /dev/ttyBmpGdb" \
         -ex "monitor auto_scan"\

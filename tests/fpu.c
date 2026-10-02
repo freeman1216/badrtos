@@ -14,23 +14,20 @@ static void task1(void *unused)
     float fmul = 1.5f;
     float res = 0.0f;
     
-    __asm__ volatile (
-                      "vmul.f32 %0,%1,%2 \n"
-                      "bl task_yield  \n"
-                      : "=&t"(res)
-                      : "t" (f), "t"(fmul)
-                      : "lr", "memory"
-                      );
+    __asm__ volatile(
+                     "vldr.32 s16, %1 \n"
+                     "vldr.32 s17, %2 \n"
+                     "vmul.f32 s18, s16, s17 \n"
+                     "bl task_yield \n"
+                     "vstr.32 s18, %0 \n"
+                     : "=m" (res)
+                     : "m" (f), "m" (fmul)
+                     : "s16", "s17", "s18", "lr", "memory"
+                     );
     
-    if(res == 3.0f)
-    {
-        bad_test_check_in();
-        task_finish();
-    }
-    else
-    {
-        bad_test_fail();
-    }
+    BAD_ASSERT(res == 3.0f, "FPU calculation mismatch in task1");
+    
+    task_finish();
 }
 
 static void task2(void *unused)
@@ -41,23 +38,20 @@ static void task2(void *unused)
     float fmul = 1.5f;
     float res = 0.0f;
     
-    __asm__ volatile (
-                      "vmul.f32 %0,%1,%2 \n"
-                      "bl task_yield  \n"
-                      : "=&t"(res)
-                      : "t" (f), "t"(fmul)
-                      : "lr", "memory"
-                      );
+    __asm__ volatile(
+                     "vldr.32 s16, %1 \n"
+                     "vldr.32 s17, %2 \n"
+                     "vmul.f32 s18, s16, s17 \n"
+                     "bl task_yield \n"
+                     "vstr.32 s18, %0 \n"
+                     : "=m" (res)
+                     : "m" (f), "m" (fmul)
+                     : "s16", "s17", "s18", "lr", "memory"
+                     );
     
-    if(res == 6.0f)
-    {
-        bad_test_check_in();
-        task_finish();
-    }
-    else
-    {
-        bad_test_fail();
-    }
+    BAD_ASSERT(res == 6.0f, "FPU calculation mismatch in task2");
+    
+    task_finish();
 }
 
 static const bad_task_descr_t task1_descr = {

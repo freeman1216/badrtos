@@ -21,15 +21,9 @@ static void task1(void *unused)
         mutex_put(&mut);
     }
     
-    if(!mut.owner && !mut.rec_takes)
-    {
-        bad_test_check_in();
-        task_finish();
-    }
-    else
-    {
-        bad_test_fail();
-    }
+    BAD_ASSERT(!mut.owner && !mut.rec_takes, "Mutex recursive take/put release failed");
+    
+    task_finish();
 }
 
 static const bad_task_descr_t task1_descr = {

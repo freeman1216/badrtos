@@ -11,6 +11,7 @@ static void task2(void *unused)
     (void)unused;
     
     preempted = 1;
+    
     bad_test_check_in();
     task_finish();
 }
@@ -35,22 +36,12 @@ static void task1(void *unused)
             
             ret = BAD_TASK_HANDLE_GET_ERROR(task2h);
             
-            if(ret != BAD_RTOS_STATUS_OK)
-                bad_test_fail();
-            
-            if(!preempted)
-                bad_test_check_in();
-            else
-                bad_test_fail();
+            BAD_ASSERT(ret == BAD_RTOS_STATUS_OK, "Task make failed");
+            BAD_ASSERT(!preempted, "Preempted while preemption disabled");
         }
         preempt_enable();
         
-        if(preempted)
-            bad_test_check_in();
-        else
-            bad_test_fail();
-        
-        bad_test_check_in();
+        BAD_ASSERT(preempted, "Task not preempted after preempt_enable");
     }
     task_finish();
 }

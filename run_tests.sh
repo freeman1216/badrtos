@@ -2,23 +2,16 @@
 
 set -xe
 code="$PWD"
-opts=""
 src=""
 run_debug=""
 added_opts=""
 optimisation=""
-opts="-ggdb -mfloat-abi=hard -Wall -Wextra -fjump-tables -nolibc --specs=nosys.specs -nostartfiles -I$code/inc/ -I$code/for_users/"
+opts="-ggdb -mfloat-abi=hard -Wall -Wextra -fjump-tables -nolibc --specs=nosys.specs -nostartfiles -I$code/inc/ -I$code/tests/test_platforms/"
+matched_dir=""
+platform=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        f411)
-            added_opts="-DBAD_PLATFORM_F411 -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -Tstm32f411ceu6.ld" 
-            src="$code/src/startup_stm32f411ceu6.c $code/tests/test_platforms/platform_setup_f411.c"
-            ;;
-        h562)
-            added_opts="-DBAD_PLATFORM_H562 -mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -Tstm32h562vgt6.ld" 
-            src="$code/src/startup_stm32h562vgt6.c $code/tests/test_platforms/platform_setup_h562.c"
-            ;;
 		opts)
             optimisation="-O2"
 			;;
@@ -26,14 +19,33 @@ while [ $# -gt 0 ]; do
             run_debug="true"
             ;;
         *)
-            echo "Option not supported"
-            exit -1
+            platform="$1"
             ;;
     esac
     shift
 done
 
-arm-none-eabi-gcc $opts $added_opts $optimisation -I"$code/inc" $src $code/tests/*.c -o build/tests.elf
+if [ "$platform" = "" ]; then
+    echo "Error: No platform provided"
+    exit 1
+fi
+
+for dir in "$code/tests/test_platforms"/*"$platform"*; do
+    if [ -d "$dir" ]; then
+        matched_dir="$dir"
+        break
+    fi
+done
+
+if [ -n "$matched_dir" ]; then
+    added_opts="$(cat "$matched_dir/platform.cflags")"
+    src="$matched_dir/*.c"
+else
+    echo "Error: Platform or option '$platform' not supported"
+    exit 1
+fi
+
+arm-none-eabi-gcc $opts -L$matched_dir $added_opts $optimisation $src $code/tests/*.c -o build/tests.elf
 
 if ! gdb build/tests.elf \
         -batch \

@@ -32,8 +32,8 @@ end
 break bad_test_fail
 commands
     silent
-    printf "TEST FAIL: bad_test_fail() reached\n\n"
-    info symbol current_testcase->test_name
+    printf "TEST FAIL: %s : bad_test_fail() reached\n\n", current_testcase->test_name
+	printf "%s:%d: error: %s \n\n", file, line, test
     bt
     quit 1
 end
@@ -42,8 +42,8 @@ end
 break isr_hardfault
 commands
     silent
-    printf "TEST FAIL: HardFault_Handler reached\n\n"
-    info symbol current_testcase->test_name
+    printf "TEST FAIL: %s : hardfault reached\n\n", current_testcase->test_name
+	info line *current_testcase->task1_descr->entry
     bt
     quit 2
 end
@@ -52,14 +52,15 @@ end
 break timeout_handler
 commands
     silent
-    printf "TEST FAIL: timeout reached\n\n"
-    info symbol current_testcase->test_name
+    printf "TEST FAIL: %s : timeout reached\n\n", current_testcase->test_name
+	info line *current_testcase->task1_descr->entry
     bt
     quit 2
 end
 
 run
 
-printf "TEST FAIL: Target halted unexpectedly\n\n"
+printf "TEST FAIL: %s : Target halted unexpectedly\n\n", current_testcase->test_name
+info line *current_testcase->task1_descr->entry 
 bt
 quit 2

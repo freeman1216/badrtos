@@ -10,13 +10,12 @@ static void task1(void *unused)
 {
     (void)unused;
     
-    bad_test_check_in();
-    
     while(!seq)
     {
-        
+        __asm__("wfi \n" :::"memory");
     }
     
+    bad_test_check_in();
     task_finish();
 }
 
@@ -24,10 +23,9 @@ static void task2(void *unused)
 {
     (void)unused;
     
-    bad_test_check_in();
-    
     seq = 1;
     
+    bad_test_check_in();
     task_finish();
 }
 

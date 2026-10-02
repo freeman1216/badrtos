@@ -7,7 +7,7 @@ typedef int32_t s32;
 typedef int16_t s16;
 typedef int8_t s8;
 
-#include "platform_setup.h" 
+#include "../platform_setup.h" 
 
 #define BAD_USART_IMPLEMENTATION
 #define BAD_FLASH_IMPLEMENTATION
@@ -131,6 +131,11 @@ u32 __platform_get_timeout_timer_size()
 void tim11_usr()
 {
     ptimeout_func();
+}
+
+u8 *__platform_get_nullptr()
+{
+    return (u8 *)0;
 }
 
 u8* __platform_get_mpu_test_region_addr()

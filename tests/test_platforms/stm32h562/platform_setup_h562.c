@@ -7,7 +7,7 @@ typedef int32_t s32;
 typedef int16_t s16;
 typedef int8_t s8;
 
-#include "platform_setup.h" 
+#include "../platform_setup.h" 
 
 #define BAD_USART_IMPLEMENTATION
 #define BAD_RCC_IMPLEMENTATION
@@ -40,7 +40,7 @@ typedef int8_t s8;
 
 #define BAD_RTOS_FLASH_LATENCY    (FLASH_LATENCY_5ws)
 
-#define BAD_RTOS_APB1L_PERIPHERALS (RCC_APB1L_TIM6 | RCC_APB1L_TIM6)
+#define BAD_RTOS_APB1L_PERIPHERALS (RCC_APB1L_TIM6 | RCC_APB1L_TIM7)
 
 #define BAD_RTOS_AHB2_PERIPEHRALS    (RCC_AHB2_GPIOA|RCC_AHB2_GPIOC|RCC_AHB2_SRAM3|RCC_AHB2_SRAM2)
 #define BAD_RTOS_APB2_PERIPHERALS    (RCC_APB2_USART1)
@@ -114,7 +114,7 @@ void __platform_timeout_setup(void (* timeout_func)(void))
 
 void __platform_start_timeout()
 {
-    tim_set_cnt(BTIM7,BAD_BTIMER_TIMEOUT_ARR);
+    tim_set_cnt(BTIM7,0);
     tim_enable(BTIM7);
 }
 
@@ -135,10 +135,15 @@ u32 __platform_get_timeout_timer_size()
 
 void tim7_usr()
 {
-    pperiodic_func();
+    ptimeout_func();
 }
 
-u8* __platform_get_mpu_test_region_addr()
+u8 *__platform_get_nullptr()
+{
+    return (u8 *)0;
+}
+
+u8 *__platform_get_mpu_test_region_addr()
 {
     return (u8 *)&(BTIM6->CR1);
 }

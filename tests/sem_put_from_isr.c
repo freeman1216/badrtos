@@ -11,17 +11,13 @@ static void task1(void *unused)
 {
     (void)unused;
     
-    bad_rtos_status_t res = sem_take(&sem,100);
-    
-    if(res == BAD_RTOS_STATUS_TIMEOUT)
-    {
-        bad_test_check_in();
-        task_finish();
-    }
-    else
-    {
-        bad_test_fail();
-    }
+    BAD_ASSERT(sem_take(&sem,20) == BAD_RTOS_STATUS_OK,"Post from isr failed");
+    task_finish();
+}
+
+static void isr_test()
+{
+    sem_put_from_isr(&sem);
 }
 
 static const bad_task_descr_t task1_descr = {
@@ -32,10 +28,11 @@ static const bad_task_descr_t task1_descr = {
     .base_priority = TASK1_PRIORITY
 };
 
-BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,sem_delay) = {
+BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,sem_from_isr) = {
     .task1_descr = &task1_descr,
+    .isr_test_func = isr_test,
     .num_testcases = 1,
-    .test_name = "Sem delay"
+    .test_name = "Sem from isr"
 };
 
 #endif

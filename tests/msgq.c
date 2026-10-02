@@ -47,16 +47,10 @@ static void task1(void *unused)
     }
     while(msgq_pull_msg(&task1q, &msg, -1) != BAD_RTOS_STATUS_WOULD_BLOCK);
     
-    if(sig0 == 4 && sig1 == 4 && sig2 == 4 && sig3 == 4)
-    {
-        msgq_release(&task1q);
-        bad_test_check_in();
-        task_finish();
-    }
-    else
-    {
-        bad_test_fail();
-    }
+    BAD_ASSERT(sig0 == 4 && sig1 == 4 && sig2 == 4 && sig3 == 4, "Message counts mismatch");
+    
+    msgq_release(&task1q);
+    task_finish();
 }
 
 static void task2(void *unused)
@@ -69,7 +63,6 @@ static void task2(void *unused)
         sig = (sig + 1) & 0x3;
     }
     
-    bad_test_check_in();
     task_finish();
 }
 
@@ -93,7 +86,7 @@ static const bad_task_descr_t task2_descr = {
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,msgq) = {
     .task1_descr = &task1_descr,
     .task2_descr = &task2_descr,
-    .num_testcases = 2,
+    .num_testcases = 1,
     .test_name = "Message queue"
 };
 

@@ -18,15 +18,9 @@ static void task1(void *unused)
     
     u32 stripped = EVENT_BARRIER_GET_FLAGS(flags);
     
-    if(stripped == REPORTED_FLAGS)
-    {
-        bad_test_check_in();
-        task_finish();
-    }
-    else
-    {
-        bad_test_fail();
-    }
+    BAD_ASSERT(stripped == REPORTED_FLAGS, "EVB flags mismatch");
+    
+    task_finish();
 }
 
 static void isr_test()

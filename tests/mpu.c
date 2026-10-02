@@ -1,5 +1,5 @@
 #include "badrtos_split.h"
-#include "test_platforms/platform_setup.h"
+#include "platform_setup.h"
 #include "runner.h"
 
 #define TASK1_PRIORITY 1 
@@ -21,26 +21,17 @@ static void task1(void *unused)
 { 
     (void)unused;
     u8 *kernel_bss_ptr = &__kernel_bss;
-    u8 try_read = *kernel_bss_ptr;
+    u8 try_read = VOLATILE_READ(*kernel_bss_ptr);
     
-    if(fault_count == 1)
-        bad_test_check_in();
-    else
-        bad_test_fail();
+    BAD_ASSERT(fault_count == 1, "Kernel BSS read fault failed");
     
-    char nullptr_read = *(char *)0;
+    char nullptr_read = VOLATILE_READ(*__platform_get_nullptr());
     
-    if(fault_count == 2)
-        bad_test_check_in();
-    else
-        bad_test_fail();
+    BAD_ASSERT(fault_count == 2, "Nullptr read fault failed");
     
-    u8 allowed_read = *mpu_test_addr;
+    u8 allowed_read = VOLATILE_READ(*mpu_test_addr);
     
-    if(fault_count == 3)
-        bad_test_fail();
-    else
-        bad_test_check_in();
+    BAD_ASSERT(fault_count == 2, "Allowed read caused a fault");
     
     task_finish();
 }

@@ -1,7 +1,7 @@
 #define BAD_RTOS_IMPLEMENTATION
 #include "badrtos_split.h"
 
-#include "test_platforms/platform_setup.h" 
+#include "platform_setup.h" 
 
 #ifdef BAD_RTOS_USE_MUTEX
 bad_task_handle_t task1h;

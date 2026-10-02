@@ -1,0 +1,1 @@
+-DBAD_PLATFORM_ARMV8 -mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -Tstm32h562vgt6.ld

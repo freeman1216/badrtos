@@ -26,6 +26,7 @@ SECTIONS {
 	{
 		__kernel_data = .;
 		*(.kernel_data)
+		. = ALIGN(32);
 		__ekernel_data = .;
 	} > RAM AT > ROM
 

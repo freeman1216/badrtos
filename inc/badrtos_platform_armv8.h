@@ -473,7 +473,7 @@ static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const b
         u32 addr_cast = (u32)tcb->stack;
         bad_mpu_region_t *stack_region = &tcb->regions[0];
         stack_region->__reg0 = addr_cast | BAD_RTOS_STACK_RBAR;
-        stack_region->__reg1 = (addr_cast + tcb->stack_size) | BAD_RTOS_STACK_RLAR;
+        stack_region->__reg1 = (addr_cast + tcb->stack_size - 32) | BAD_RTOS_STACK_RLAR;
     }
     { //User regions
         u32 i = 1;

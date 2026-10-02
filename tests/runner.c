@@ -1,7 +1,7 @@
 #define BAD_RTOS_IMPLEMENTATION
 #include "badrtos_split.h"
 
-#include "test_platforms/platform_setup.h"
+#include "platform_setup.h"
 #include "runner.h"
 
 #define MEMMANAGE_IRQN (-16)
@@ -56,8 +56,12 @@ void bad_test_check_in()
     }
 }
 
-void bad_test_fail()
+void bad_test_fail(char *file, int line, char *test)
 {
+    (void)file;
+    (void)line;
+    (void)test;
+    
     while(1)
     {
         
@@ -69,7 +73,7 @@ void isr_test()
     if(current_testcase->isr_test_func)
         current_testcase->isr_test_func();
     else
-        bad_test_fail();
+        bad_test_fail(__FILE__,__LINE__,"Isr fired without testcase having a test func");
 }
 
 void timeout_handler()
@@ -113,7 +117,7 @@ void memmanage_c(uint32_t *stack_frame) {
     }
     else
     {
-        bad_test_fail();
+        bad_test_fail(__FILE__,__LINE__,"Memfault fired without testcase having a test func");
     }
 }
 
@@ -124,10 +128,10 @@ void runner_task(void *unused)
     u32 periodic_irqn = __platform_get_periodic_irqn();
     
     if(irq_acquire(periodic_irqn) != BAD_RTOS_STATUS_OK)
-        bad_test_fail();
+        bad_test_fail(__FILE__,__LINE__,"Failed to acquire periodic irq");
     
     if(irq_acquire(MEMMANAGE_IRQN) != BAD_RTOS_STATUS_OK)
-        bad_test_fail();
+        bad_test_fail(__FILE__,__LINE__,"Failed to acquire memfault irq");
     
     BAD_ITER_SECTION_ITER_ALL(tests,bad_test_case_t,current_testcase)
     {
@@ -154,7 +158,7 @@ void runner_task(void *unused)
            BAD_TASK_HANDLE_GET_ERROR(task2h) != BAD_RTOS_STATUS_OK ||
            BAD_TASK_HANDLE_GET_ERROR(task3h) != BAD_RTOS_STATUS_OK )
         {
-            bad_test_fail();
+            bad_test_fail(__FILE__,__LINE__,"Task creation failed");
         }
         
         bad_test_init(current_testcase->num_testcases);
@@ -250,7 +254,7 @@ int __attribute__((noinline)) main()
     
     bad_rtos_start();
     
-    bad_test_fail();
+    bad_test_fail(__FILE__,__LINE__,"Badrtos start failed");
     
     while(1)
     {

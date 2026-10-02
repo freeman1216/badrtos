@@ -4,7 +4,15 @@
 
 extern void bad_test_init(u32 checkins_count);
 extern void bad_test_check_in();
-extern void bad_test_fail();
+extern void bad_test_fail(char *file,int,char *test);
+
+#define BAD_ASSERT(cond,test_str) \
+do{\
+if((cond)) \
+bad_test_check_in();\
+else \
+bad_test_fail(__FILE__,__LINE__,test_str);\
+}while(0)
 
 extern bad_task_handle_t task1h;
 #define TASK1_STACK_SIZE 1024

@@ -1548,6 +1548,27 @@ void __attribute__((naked)) isr_hardfault(){
                    );
 }
 
+typedef struct
+{
+    volatile u32 TYPE;                   
+    volatile u32 CTRL;                   
+    volatile u32 RNR;                    
+    volatile u32 RBAR;                   
+    volatile u32 RLAR;                   
+    volatile u32 RBAR_A1;                
+    volatile u32 RLAR_A1;                
+    volatile u32 RBAR_A2;                
+    volatile u32 RLAR_A2;                
+    volatile u32 RBAR_A3;                
+    volatile u32 RLAR_A3;                
+    u32 RESERVED0[1];
+    volatile u32 MAIR[2];
+} bad_mpu_typedef_ta;
+
+
+#define BA1_MPU_BASE (0xE000ED90UL)
+#define BA1_MPU ((bad_mpu_typedef_ta *)BA1_MPU_BASE)
+
 void __attribute__((used)) hardfault_c(uint32_t* stack){
     volatile uint32_t r0  = stack[0];
     volatile uint32_t r1  = stack[1];
@@ -1563,6 +1584,15 @@ void __attribute__((used)) hardfault_c(uint32_t* stack){
     volatile uint32_t bfar = SCB->BFAR;
     volatile uint32_t afsr = SCB->AFSR;
     volatile uint32_t dfsr = SCB->DFSR;
+    
+    volatile bad_mpu_typedef_ta *mpu = BA1_MPU;
+    
+    for(u32 i = 0; i < 8; i++)
+    {
+        mpu->RNR = i;
+    }
+    
+    
 #ifdef BAD_HARDFAULT_USE_UART
     uart_disable(FAULT_LOG_UART);
     uart_setup(FAULT_LOG_UART,USART_BRR_9600,FAULT_LOG_UART_SETTINGS,0,0);

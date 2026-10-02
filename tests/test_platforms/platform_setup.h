@@ -12,7 +12,9 @@ extern u32 __platform_get_timeout_timer_size();
 extern void __platform_periodic_irq_setup(void (* periodic_func)(void));
 extern u32 __platform_get_periodic_irqn();
 
-extern u8* __platform_get_mpu_test_region_addr();
+extern u8 *__platform_get_nullptr(); 
+
+extern u8 *__platform_get_mpu_test_region_addr();
 extern u32 __platform_get_mpu_test_region_size();
 
 #endif

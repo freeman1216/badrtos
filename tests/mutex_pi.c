@@ -22,7 +22,7 @@ static void task1(void *unused)
         preempted = 1;
         mutex_put(&mut);
         
-        bad_test_check_in();
+        BAD_ASSERT(preempted == 1, "Task 1 completed mutex release");
     }
     task_finish();
 }
@@ -36,7 +36,7 @@ static void task2(void *unused)
         mutex_take(&mut,0);
         mutex_put(&mut);
         
-        bad_test_check_in();
+        BAD_ASSERT(1, "Task 2 acquired and released mutex");
     }
     task_finish();
 }
@@ -52,7 +52,7 @@ static void task3(void *unused)
             task_yield();
         }
         
-        bad_test_check_in();
+        BAD_ASSERT(preempted == 1, "Task 3 executed after priority inheritance");
     }
     task_finish();
 }

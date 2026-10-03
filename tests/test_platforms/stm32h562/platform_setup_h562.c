@@ -65,6 +65,7 @@ static inline void __periph_setup()
     //Enable UART clocking
     rcc_set_apb2_clocking(RCC,BAD_RTOS_APB2_PERIPHERALS);
     rcc_set_apb1l_clocking(RCC,BAD_RTOS_APB1L_PERIPHERALS);
+    dbgmcu_freeze_apb1l_periphals(DBGMCU, DBGMCU_APB1L_TIM6 | DBGMCU_APB1L_TIM7);
 }
 
 static inline void __tick_setup()
@@ -87,7 +88,6 @@ void __platform_periodic_irq_setup( void (* periodic_func)(void))
     nvic_set_interrupt_priority(TIM6_INTR,NVIC_PRIO14);
     nvic_clear_interrupt(TIM6_INTR);
     nvic_disable_interrupt(TIM6_INTR);
-    dbgmcu_freeze_apb1l_periphals(DBGMCU, DBGMCU_APB1L_TIM6);
     tim_enable(BTIM6);
     pperiodic_func = periodic_func;
 }
@@ -108,7 +108,6 @@ void __platform_timeout_setup(void (* timeout_func)(void))
     nvic_set_interrupt_priority(TIM7_INTR,NVIC_PRIO1);
     nvic_clear_interrupt(TIM7_INTR);
     nvic_enable_interrupt(TIM7_INTR);
-    dbgmcu_freeze_apb1l_periphals(DBGMCU, DBGMCU_APB1L_TIM7);
     ptimeout_func = timeout_func;
 }
 

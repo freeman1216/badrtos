@@ -2,7 +2,7 @@
 
 set -xe
 code="$PWD"
-opts="-ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard -nolibc --specs=nosys.specs -nostartfiles -I$code/tests -I$code/inc/"
+opts="-ggdb -Wall -Wextra -fjump-tables -mfloat-abi=hard -nolibc --specs=nosys.specs -nostartfiles -I$code/tests/test_platforms -I$code/inc/"
 added_opts=""
 optimisation=""
 src=""

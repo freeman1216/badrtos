@@ -1604,6 +1604,11 @@ _Static_assert(__builtin_types_compatible_p(typeof(*(ptr)), typeof(((type *)0)->
 
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr)[0]))
 
+static inline u32 find_pow2_order(u32 val, bool round_down)
+{
+    return 32 - __builtin_clz(val - 1 + round_down) - round_down;
+}
+
 //Doubly linked list helpers
 
 #define DLIST_INITIALISER(__name) (bad_link_node_t){&(__name), &(__name)}
@@ -1641,6 +1646,11 @@ static inline void dlist_remove(bad_link_node_t *node)
     node->prev = 0;
 }
 
+static inline bool dlist_is_empty(bad_link_node_t *list)
+{
+    return list == list->next;
+}
+
 #define dlist_iter_cond(pos, list, cond) \
 for((pos) = (list)->next; \
 (pos) != (list) && (cond);\
@@ -1663,13 +1673,70 @@ for((pos) = BAD_CONTAINER_OF((list)->next,typeof(*pos),member);\
 #define dlist_iter_cond_safe_cast(pos, s, list, member, cond) \
 for((pos) = BAD_CONTAINER_OF((list)->next,typeof(*pos),member);\
 (&((pos)->member) == (list) ? ((pos) = 0, 0) : ((s) = BAD_CONTAINER_OF((pos)->member.next,typeof(*pos),member),1)) && (cond);\
-(pos) =  (s))
+(pos) = (s))
 
 #define dlist_iter_all_cast(pos, list,member)\
 dlist_iter_cond_cast(pos,list,member,1)
 
 #define dlist_iter_all_safe_cast(pos, s, list, member)\
 dlist_iter_cond_safe_cast(pos, s, list, member,1)
+
+//Helpers for bitmapped dlist (array of list heads + bmask to track occupancy)
+//Currently used in buddy alloc and ready queue
+static inline void bmap_dlist_add_front(bad_link_node_t *list_arr,
+                                        bad_link_node_t *node,
+                                        u32 *bmap,
+                                        u32 pos)
+{
+    dlist_add_front(list_arr + pos,node);
+    *bmap |= 1UL << pos;
+}
+
+static inline void bmap_dlist_add_back(bad_link_node_t *list_arr,
+                                       bad_link_node_t *node,
+                                       u32 *bmap,
+                                       u32 pos)
+{
+    dlist_add_back(list_arr + pos,node);
+    *bmap |= 1UL << pos;
+}
+
+static inline void bmap_dlist_remove(bad_link_node_t *list_arr,
+                                     bad_link_node_t *node,
+                                     u32 *bmap,
+                                     u32 pos)
+{
+    bad_link_node_t *list = list_arr + pos;
+    
+    dlist_remove(node);
+    
+    if(dlist_is_empty(list))
+        *bmap &= ~(1 << pos);
+}
+
+static inline bad_link_node_t * bmap_dlist_pull_front(bad_link_node_t *list_arr,
+                                                      u32 *bmap,
+                                                      u32 pos)
+{
+    bad_link_node_t *list = list_arr + pos;
+    bad_link_node_t *ret = list->next;
+    
+    bmap_dlist_remove(list_arr,ret,bmap,pos);
+    
+    return ret;
+}
+
+static inline bad_link_node_t * bmap_dlist_pull_back(bad_link_node_t *list_arr,
+                                                     u32 *bmap,
+                                                     u32 pos)
+{
+    bad_link_node_t *list = list_arr + pos;
+    bad_link_node_t *ret = list->prev;
+    
+    bmap_dlist_remove(list_arr,ret,bmap,pos);
+    
+    return ret;
+}
 
 //Iter sections
 /* 
@@ -1873,11 +1940,38 @@ typedef enum
     BAD_SYSTICK_BOTH = BAD_SYSTICK_DELAY_WAKE_PENDING|BAD_SYSTICK_TIMEFRAME_PENDING//0x3
 } bad_systick_status_t;
 
-static bad_kernel_cb_t __attribute__((section(".kernel_bss"))) kernel_cb;
 
-static tcb_bitmask_slab_t __attribute__((section(".kernel_bss"))) tcbslab;
+#ifdef BAD_RTOS_USE_KHEAP
+typedef struct 
+{
+    u8* heap;
+    u32 heads_bmask;
+    u32 max_order;
+    u32 min_order;
+    bad_link_node_t* free_list;
+    u32* bmask;
+} bad_buddy_t;
+#define BUDDY_BITMASK_SIZE(max_order,min_order)\
+DIV_ROUND_UP(1UL << (max_order - min_order),32) // bits required = (2 ^ max_order - min_order) - 1, to get the words divide by 32 and round up
 
-volatile u32 preempt_count = 1;
+#ifndef KMIN_ORDER
+#define KMIN_ORDER 5
+#else 
+#if KMIN_ORDER < 3 
+#error "Minimal order should be >= 3 to store the pointers to the next free block and the prev block "
+#endif
+#endif
+
+#ifndef KMAX_ORDER 
+#define KMAX_ORDER 12
+#else
+#if KMAX_ORDER < KMIN_ORDER
+#error "Its called max order for a reason"
+#endif
+#endif 
+#define KHEAP_SIZE 1 << KMAX_ORDER
+#define KFREE_LIST_SIZE (KMAX_ORDER-KMIN_ORDER + 1)
+#endif
 
 #define BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES (BAD_RTOS_GLOBAL_POOL_SIZE * sizeof(bad_isr_op_obj_t))
 
@@ -1908,45 +2002,21 @@ _Static_assert( 1
 #endif
                ,"What have i done #2");
 
-static u8  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES];
-static bad_pool_t gpool; //Not initialsed to prevent isrs from generating events before the kernel has started
-
 #ifdef BAD_RTOS_USE_KHEAP
-typedef struct 
-{
-    u8* heap;
-    u32 heads_bmask;
-    u32 max_order;
-    u32 min_order;
-    bad_link_node_t* free_list;
-    u32* bmask;
-} bad_buddy_t;
-#define BUDDY_BITMASK_SIZE(max_order,min_order)\
-DIV_ROUND_UP(1UL << (max_order - min_order),32) // bits required = (2 ^ max_order - min_order) - 1, to get the words divide by 32 and round up
-
-#ifndef KMIN_ORDER
-#define KMIN_ORDER 5
-#else 
-#if KMIN_ORDER < 3 
-#error "Minimal order should be >= 3 to store the pointers to the next free block and the prev block "
-#endif
-#endif
-
-#ifndef KMAX_ORDER 
-#define KMAX_ORDER 12
-#else
-#if KMAX_ORDER < MIN_ORDER
-#error "Its called max order for a reason"
-#endif
-#endif 
-#define KHEAP_SIZE 1 << KMAX_ORDER
-#define KFREE_LIST_SIZE (KMAX_ORDER-KMIN_ORDER + 1)
-
 static u8 __attribute__((section(".kheap"))) kheap[KHEAP_SIZE];
 static bad_buddy_t __attribute__((section(".kernel_bss")))kernel_buddy;
 static bad_link_node_t __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIST_SIZE];
 static u32 __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_SIZE(KMAX_ORDER, KMIN_ORDER)]; 
 #endif
+
+static bad_kernel_cb_t __attribute__((section(".kernel_bss"))) kernel_cb;
+
+static tcb_bitmask_slab_t __attribute__((section(".kernel_bss"))) tcbslab;
+
+static u8  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES];
+static bad_pool_t gpool; //Not initialsed to prevent isrs from generating events before the kernel has started
+
+volatile u32 preempt_count = 1;
 
 #define IDLE_TASK_PRIO BAD_RTOS_PRIO_COUNT - 1
 #define IDLE_TASK_STACK_SIZE 128
@@ -2488,8 +2558,30 @@ static inline void __mpu_kernel_region_restore_lock(u32 key)
 #endif
 // ///CODE_REPLACE_END
 
+static inline void __bmask_toggle_if_list_empty(u32 *bmask,bad_link_node_t *list, u32 pos)
+{
+    *bmask ^= (u32)dlist_is_empty(list) << pos;
+}
+
 // Memory helpers
 #ifdef BAD_RTOS_USE_KHEAP
+
+static inline u32 __buddy_toggle_bmask(bad_buddy_t *cb, u8 *block, u32 order)
+{
+    u32 idx = cb->max_order - order;
+    
+    u32 offset_from_base = block - cb->heap;
+    
+    u32 level = (1 << (idx - 1)) - 1;
+    u32 offset = offset_from_base >> (order + 1);
+    u32 bmaskidx = level + offset;
+    
+    u32 bmask_word = bmaskidx >> 5;
+    u32 bmask_bit = bmaskidx & 31;
+    cb->bmask[bmask_word] ^= 1 << bmask_bit;
+    
+    return (cb->bmask[bmask_word] & (1 << bmask_bit)) != 0;
+}
 
 void  __buddy_init(bad_buddy_t *cb,
                    u8 *heap, 
@@ -2509,69 +2601,51 @@ void  __buddy_init(bad_buddy_t *cb,
         dlist_init(&freelist[i]);
     }
     
-    bad_link_node_t* embedded_node = (bad_link_node_t*)cb->heap;
-    dlist_add_front(freelist,embedded_node);
-    
-    cb->heads_bmask = 1;
+    bad_link_node_t *embedded_node = (bad_link_node_t*)cb->heap;
+    bmap_dlist_add_front(freelist,embedded_node,&cb->heads_bmask,0);
 }
 
 static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
 {
-    if(order > cb->max_order )
-    {
+    if(order > cb->max_order)
         return 0;
-    }
     
+    u32 picked_idx = 0;
     u32 idx = cb->max_order  - order;
-    u32 order_mask = (1 << (idx + 1)) - 1;
-    
-    u32 picked_idx = 31 - __builtin_clz(cb->heads_bmask & order_mask);
-    
-    if(picked_idx == UINT32_MAX)
     {
-        return 0;
+        u32 order_mask = (1 << (idx + 1)) - 1;
+        
+        picked_idx = 31 - __builtin_clz(cb->heads_bmask & order_mask);
+        
+        if(picked_idx == UINT32_MAX)
+            return 0;
     }
     
-    u32 splits = idx - picked_idx;
-    u8 *block_for_split = (u8 *)cb->free_list[picked_idx].next;
-    dlist_remove(cb->free_list[picked_idx].next);
+    u8 *block_for_split = (u8 *)bmap_dlist_pull_front(cb->free_list,&cb->heads_bmask,picked_idx);
     
-    cb->heads_bmask ^= (u32)(&cb->free_list[picked_idx] == cb->free_list[picked_idx].next) << picked_idx;
-    
-    u32 splited_block_size = 1 << (cb->max_order - picked_idx-1);
-    
-    bad_link_node_t *unused_block;
-    u32 bmaskidx, bmask_word, bmask_bit, offset_from_base;
+    u32 splited_block_size = 1UL << (cb->max_order - picked_idx - 1);
     
     if(picked_idx)
-    {
-        offset_from_base =  block_for_split - cb->heap;
-        bmaskidx = ((1 << (picked_idx - 1)) - 1) + ((offset_from_base) >> (cb->max_order - picked_idx + 1));
-        bmask_word = bmaskidx >> 5;
-        bmask_bit = bmaskidx & 31;
-        cb->bmask[bmask_word] ^= 1 << bmask_bit; 
-    }
+        __buddy_toggle_bmask(cb,block_for_split,cb->max_order - picked_idx);
     
-    for(u32 i = 0; i < splits;i++)
+    for(; picked_idx < idx; picked_idx++)
     {
-        unused_block = (bad_link_node_t *)(block_for_split + splited_block_size);
-        bad_link_node_t *head = &cb->free_list[picked_idx + 1];
-        dlist_add_front(head,unused_block);
+        u32 splited_idx = picked_idx + 1;
         
-        offset_from_base = (u8 *)unused_block - cb->heap;
-        bmaskidx = ((1 << (picked_idx)) - 1) + ((offset_from_base) >> (cb->max_order - picked_idx));
-        bmask_word = bmaskidx >> 5;
-        bmask_bit = bmaskidx & 31;
-        cb->bmask[bmask_word] ^= 1 << bmask_bit;        
-        picked_idx++;
-        cb->heads_bmask |= (1 << picked_idx);
-        splited_block_size >>= 1;
+        bad_link_node_t *unused_block = (bad_link_node_t *)(block_for_split + splited_block_size);
+        
+        bmap_dlist_add_front(cb->free_list,unused_block,&cb->heads_bmask, splited_idx);
+        
+        u32 split_order = cb->max_order - splited_idx;
+        __buddy_toggle_bmask(cb,(u8 *)unused_block,split_order);
+        
+        splited_block_size >>= 1UL;
     }
     
     return block_for_split;
 }
 
-static void __buddy_free(bad_buddy_t *cb,void *block,u32 order )
+static void __buddy_free(bad_buddy_t *cb,void *block, u32 order)
 {
     if(order > cb->max_order)
         return;
@@ -2582,62 +2656,44 @@ static void __buddy_free(bad_buddy_t *cb,void *block,u32 order )
     
     while((idx = cb->max_order - curr_order))
     {
-        u32 buddy_bitmask = 1ULL << curr_order;
-        
-        u32 offset_from_base = (u8 *)curr_block - cb->heap;
-        
-        u32 bmaskidx =  ((1 << (idx - 1)) - 1) + ((offset_from_base) >> (curr_order + 1));
-        u32 bmask_word = bmaskidx >> 5;
-        u32 bmask_bit = bmaskidx & 31;
-        
-        cb->bmask[bmask_word] ^= 1ULL << bmask_bit;
-        
-        if(cb->bmask[bmask_word] & 1ULL << bmask_bit)
+        if(__buddy_toggle_bmask(cb,curr_block,curr_order))
             break;
         
+        u32 offset_from_base = (u8 *)curr_block - cb->heap;
+        u32 buddy_bitmask = 1ULL << curr_order;
         u32 buddy_offset = offset_from_base ^ buddy_bitmask;
         u32 parent_offset = offset_from_base &(~buddy_bitmask);
         void *buddy_addr = (void*)(cb->heap + buddy_offset);
         void *parent_addr = (void*)(cb->heap + parent_offset); 
         
         bad_link_node_t *buddy = (bad_link_node_t *)buddy_addr;
-        dlist_remove(buddy);
-        
-        cb->heads_bmask ^= (u32)(&cb->free_list[idx] == cb->free_list[idx].next) << idx;
+        bmap_dlist_remove(cb->free_list,buddy,&cb->heads_bmask,idx);
         
         curr_order++;
         curr_block = parent_addr;
     }
     
     bad_link_node_t *final_block = (bad_link_node_t*)curr_block;
-    bad_link_node_t *head = cb->free_list[idx].next;
-    dlist_add_front(head,final_block);
     
-    cb->heads_bmask |= 1 << idx;
+    bmap_dlist_add_front(cb->free_list,final_block,&cb->heads_bmask,idx);
 }
 
 BAD_RTOS_STATIC void* __kernel_alloc(u32 size)
 {
-    u32 closest_order;
-    closest_order = 32 -__builtin_clz(size) - !(size & (size-1));
+    u32 closest_order = find_pow2_order(size,false);
     
     if(closest_order < kernel_buddy.min_order)
-    {
         closest_order = kernel_buddy.min_order;
-    }
     
-    return __buddy_alloc(&kernel_buddy,closest_order );
+    return __buddy_alloc(&kernel_buddy,closest_order);
 }
 
 BAD_RTOS_STATIC void __kernel_free(void *block,u32 size)
 {
-    u32 closest_order;
-    closest_order = 32 -__builtin_clz(size) - !(size & (size-1));
+    u32 closest_order = find_pow2_order(size,false);
     
     if(closest_order < kernel_buddy.min_order)
-    {
         closest_order = kernel_buddy.min_order;
-    }
     
     __buddy_free(&kernel_buddy,block,closest_order );
 }
@@ -2654,68 +2710,69 @@ BAD_RTOS_STATIC void __tcb_queue_slab_init()
 
 BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_alloc()
 {
-    if(tcbslab.free_bitmask == 0)
+    bad_tcb_t *ret = 0;
+    
+    if(tcbslab.free_bitmask)
     {
-        return 0; 
+        u8 block_idx = __builtin_ctz(tcbslab.free_bitmask);
+        tcbslab.free_bitmask &= ~(1UL << block_idx);
+        
+        ret = tcbslab.node_arr + block_idx;
     }
     
-    u8 block_idx = __builtin_ctz(tcbslab.free_bitmask);
-    tcbslab.free_bitmask &= ~(1UL << block_idx);
-    
-    return tcbslab.node_arr + block_idx;
+    return ret;
 }
 
 BAD_RTOS_STATIC u8 __tcb_slab_get_idx_from_ptr(bad_tcb_t *block)
 {
-    if(tcbslab.node_arr > block || tcbslab.node_arr + BAD_RTOS_MAX_TASKS < block)
-    {
-        return 0xFF;
-    }
+    u8 ret = 0xFF;
     
-    return block - tcbslab.node_arr;
+    if(tcbslab.node_arr <= block &&
+       tcbslab.node_arr + BAD_RTOS_MAX_TASKS > block)
+        ret = block - tcbslab.node_arr;
+    
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(u8 idx)
 {
-    if(idx >= BAD_RTOS_MAX_TASKS)
-    {
-        return 0;
-    }
+    bad_tcb_t *ret = 0;
     
-    return tcbslab.node_arr+idx;
+    if(idx < BAD_RTOS_MAX_TASKS)
+        ret = tcbslab.node_arr + idx;
+    
+    return ret; 
 }
 
 BAD_RTOS_STATIC void __tcb_slab_free(bad_tcb_t *tcb)
 {
     u8 block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
     
-    if(block_idx >= BAD_RTOS_MAX_TASKS)
-    {
-        return;
-    }
-    
-    tcbslab.free_bitmask |= (1ULL << block_idx); 
+    if(block_idx < BAD_RTOS_MAX_TASKS)
+        tcbslab.free_bitmask |= (1ULL << block_idx);
 }
 
 BAD_RTOS_STATIC void *__obj_list_pull_atomic(volatile void* list)
 {
-    u32 *head;
-    
+    u32 *head = 0;
     do
     {
         head = (u32 *)__ldrex(list);
-        if(!head){
+        
+        if(!head)
+        {
             __clrex();
-            return 0;
+            break;
         }
-    }while(__strex(*head, (volatile u32 *)list));
+    }
+    while(__strex(*head, (volatile u32 *)list));
+    
     return head;   
 }
 
 BAD_RTOS_STATIC void __obj_list_push_atomic(volatile void *list,void *obj)
 {
     u32 *new_head = obj;
-    
     do
     {
         *new_head = __ldrex(list);
@@ -2725,9 +2782,7 @@ BAD_RTOS_STATIC void __obj_list_push_atomic(volatile void *list,void *obj)
 
 bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes){
     if(!pool || !mem || !block_size ||!size_in_bytes || size_in_bytes % block_size)
-    {
         return BAD_RTOS_STATUS_BAD_PARAMETERS;
-    }
     
     pool->mem = mem;
     pool->block_size = block_size;
@@ -2742,25 +2797,24 @@ bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 siz
 void* pool_alloc(bad_pool_t *pool)
 {
     void *res =__obj_list_pull_atomic(&pool->next);
-    if(res)
-    {
-        return res;
-    }
     
-    u32 curr;
-    do
+    if(!res)
     {
-        curr = __ldrex(&pool->curr);
-        
-        if(curr >= pool->size_in_bytes)
+        u32 curr;
+        do
         {
-            return 0;
+            curr = __ldrex(&pool->curr);
+            
+            if(curr >= pool->size_in_bytes)
+                return 0;
+            
         }
+        while(__strex(curr+pool->block_size,&pool->curr));
         
+        res = pool->mem + curr;
     }
-    while(__strex(curr+pool->block_size,&pool->curr));
     
-    return pool->mem + curr;
+    return res;
 }
 
 void pool_free(bad_pool_t *pool,void *obj)
@@ -2768,9 +2822,7 @@ void pool_free(bad_pool_t *pool,void *obj)
     u8 *cmp_ptr = obj;
     
     if(pool->mem > cmp_ptr || pool->mem + pool->size_in_bytes <= cmp_ptr)
-    {
         __builtin_trap();
-    }
     
     __obj_list_push_atomic(pool,obj);
 }
@@ -2786,14 +2838,14 @@ void gpool_free(void *obj){
 //Scheduling helpers
 BAD_RTOS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t *tcb,bad_rtos_misc_t target)
 {
-    if(tcb->misc != target)
-    {
-        return BAD_RTOS_STATUS_WRONG_Q;
-    }
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
-    dlist_remove(&tcb->qnode);
+    if(tcb->misc == target)
+        dlist_remove(&tcb->qnode);
+    else
+        ret = BAD_RTOS_STATUS_WRONG_Q;
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC void __prio_list_enqueue(bad_link_node_t *q,bad_tcb_t *tcb, bad_rtos_misc_t target)
@@ -2813,12 +2865,11 @@ BAD_RTOS_STATIC void __prio_list_enqueue(bad_link_node_t *q,bad_tcb_t *tcb, bad_
 
 BAD_RTOS_STATIC void __readyq_enqueue(bad_tcb_t *tcb)
 {
-    bad_link_node_t *head =  &kernel_cb.readyq[tcb->raised_priority];
-    bad_link_node_t *tcb_qnode_ptr = &tcb->qnode;
+    bmap_dlist_add_back(kernel_cb.readyq,
+                        &tcb->qnode,
+                        &kernel_cb.ready_bmask,
+                        tcb->raised_priority);
     
-    dlist_add_back(head,tcb_qnode_ptr);
-    
-    kernel_cb.ready_bmask |= 1 << tcb->raised_priority;
     tcb->misc = BAD_RTOS_MISC_READYQ_MEMBER;
 }
 
@@ -2829,13 +2880,15 @@ BAD_RTOS_STATIC u32 __get_top_ready_prio()
 
 BAD_RTOS_STATIC bad_rtos_status_t __readyq_dequeue(bad_tcb_t *tcb)
 {
-    bad_rtos_status_t ret = __remove_entry(tcb,BAD_RTOS_MISC_READYQ_MEMBER);
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
-    if(ret == BAD_RTOS_STATUS_OK)
-    {
-        u32 last = kernel_cb.readyq[tcb->raised_priority].next == &kernel_cb.readyq[tcb->raised_priority]; 
-        kernel_cb.ready_bmask ^= last << tcb->raised_priority;
-    }
+    if(tcb->misc == BAD_RTOS_MISC_READYQ_MEMBER)
+        bmap_dlist_remove(kernel_cb.readyq,
+                          &tcb->qnode,
+                          &kernel_cb.ready_bmask,
+                          tcb->raised_priority);
+    else
+        ret = BAD_RTOS_STATUS_WRONG_Q;
     
     return ret;
 }
@@ -2843,12 +2896,10 @@ BAD_RTOS_STATIC bad_rtos_status_t __readyq_dequeue(bad_tcb_t *tcb)
 BAD_RTOS_STATIC bad_tcb_t *__readyq_dequeue_head()
 {
     u32 top = __get_top_ready_prio();
-    bad_link_node_t *tcb_qnode_ptr = kernel_cb.readyq[top].next;
-    bad_tcb_t *tcb = BAD_CONTAINER_OF(tcb_qnode_ptr, bad_tcb_t, qnode);
+    bad_link_node_t *tcb_qnode_ptr = 
+        bmap_dlist_pull_front(kernel_cb.readyq,&kernel_cb.ready_bmask,top);
     
-    __readyq_dequeue(tcb);
-    
-    return tcb;
+    return BAD_CONTAINER_OF(tcb_qnode_ptr, bad_tcb_t, qnode);
 }
 
 BAD_RTOS_STATIC void __delayq_enqueue(bad_tcb_t *tcb, u32 absolute)
@@ -2876,55 +2927,60 @@ BAD_RTOS_STATIC void __delayq_enqueue(bad_tcb_t *tcb, u32 absolute)
 
 BAD_RTOS_STATIC bad_rtos_status_t __delayq_dequeue(bad_tcb_t *tcb)
 {
-    if(tcb->delayq_misc == BAD_RTOS_MISC_NOT_DELAYED)
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
+    if(tcb->delayq_misc != BAD_RTOS_MISC_NOT_DELAYED)
     {
-        return BAD_RTOS_STATUS_WRONG_Q;
+        bad_link_node_t *tcb_delaynode_ptr = &tcb->delaynode;
+        bad_link_node_t *head = &kernel_cb.delayq;
+        
+        if(tcb_delaynode_ptr->next != head)
+        {
+            bad_tcb_t *next = BAD_CONTAINER_OF(tcb_delaynode_ptr->next,bad_tcb_t,delaynode);
+            next->counter += tcb->counter;
+        }
+        
+        dlist_remove(tcb_delaynode_ptr);
+        
+        tcb->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED;
+    }
+    else
+    {
+        ret = BAD_RTOS_STATUS_WRONG_Q;
     }
     
-    bad_link_node_t *tcb_delaynode_ptr = &tcb->delaynode;
-    bad_link_node_t *head = &kernel_cb.delayq;
-    
-    if(tcb_delaynode_ptr->next != head)
-    {
-        bad_tcb_t *next = BAD_CONTAINER_OF(tcb_delaynode_ptr->next,bad_tcb_t,delaynode);
-        next->counter += tcb->counter;
-    }
-    
-    dlist_remove(tcb_delaynode_ptr);
-    
-    tcb->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED;
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_tcb_t* __prio_list_dequeue_head(bad_link_node_t *q)
 {
-    bad_link_node_t *head = q->next;
+    bad_tcb_t *ret = 0;
     
-    if(head == q)
+    if(!dlist_is_empty(q))
     {
-        return 0;
+        bad_link_node_t *head = q->next;
+        
+        dlist_remove(head);
+        ret = BAD_CONTAINER_OF(head,bad_tcb_t,qnode); 
     }
     
-    dlist_remove(head);
-    
-    return BAD_CONTAINER_OF(head,bad_tcb_t,qnode);
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_tcb_t* __delayq_dequeue_head()
 {
-    bad_link_node_t *head = kernel_cb.delayq.next;
+    bad_tcb_t *ret = 0;
     
-    if(head == &kernel_cb.delayq)
+    if(!dlist_is_empty(&kernel_cb.delayq))
     {
-        return 0;
+        bad_link_node_t *head = kernel_cb.delayq.next;
+        
+        dlist_remove(head);
+        ret = BAD_CONTAINER_OF(head,bad_tcb_t,delaynode);
+        ret->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED; 
     }
     
-    dlist_remove(head);
-    
-    bad_tcb_t *head_tcb = BAD_CONTAINER_OF(head,bad_tcb_t,delaynode);
-    head_tcb->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED; 
-    
-    return head_tcb;
+    return ret;
 }
 
 BAD_RTOS_STATIC void __enqueue_head(bad_link_node_t *q, bad_tcb_t *tcb, bad_rtos_misc_t target)
@@ -2965,9 +3021,8 @@ BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q)
     if(q->tail == &q->stub)
     {
         if(!next)
-        {
             return 0;
-        }
+        
         q->tail = next;
         tail = next;
         next = next->next;
@@ -2980,17 +3035,13 @@ BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q)
     }
     
     if(q->head != tail)
-    {
         return 0; //not possible in the current usecase but nice to have
-    }
     
     __isr_q_push(q,&q->stub);
     next = tail->next;
     
     if(!next)
-    {
         return 0;//not possible in the current usecase but nice to have
-    }
     
     q->tail = next;
     return tail;
@@ -2999,18 +3050,21 @@ BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q)
 BAD_RTOS_STATIC bad_rtos_status_t __kernel_notify(bad_isr_op_t op,void *arg)
 {
     bad_isr_op_obj_t *message = gpool_alloc();
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_ALLOC_FAIL;
     
-    if(!message)
+    if(message)
     {
-        return BAD_RTOS_STATUS_ALLOC_FAIL;
+        message->op_kind = op;
+        message->arg = arg;
+        __dmb();
+        
+        __isr_q_push(&kernel_cb.isrq,message);
+        __scb_trigger_pendsv();
+        
+        ret = BAD_RTOS_STATUS_OK;
     }
-    message->op_kind = op;
-    message->arg = arg;
-    __dmb();
-    __isr_q_push(&kernel_cb.isrq,message);
-    __scb_trigger_pendsv();
     
-    return BAD_RTOS_STATUS_OK; 
+    return ret;
 }
 
 BAD_RTOS_STATIC void __sched_update(bad_tcb_t *tcb)
@@ -3071,15 +3125,13 @@ static void __attribute__((used)) __handle_systick_event(bad_systick_status_t st
     }
     
     if(status & BAD_SYSTICK_TIMEFRAME_PENDING)
-    {
         kernel_cb.curr->counter = kernel_cb.curr->ticks_to_change;
-    }    
     
     u32 top_ready_prio = __get_top_ready_prio(); 
     
     if(kernel_cb.ready_bmask && !preempt_count && 
        top_ready_prio + (status == BAD_SYSTICK_DELAY_WAKE_PENDING)
-       <= kernel_cb.curr->raised_priority )
+       <= kernel_cb.curr->raised_priority)
     {
         __readyq_enqueue(kernel_cb.curr);
         __sched_update(__readyq_dequeue_head());
@@ -3107,34 +3159,44 @@ BAD_RTOS_STATIC u32 * __init_stack(taskptr task, u32 *stacktop,void *args)
 //Core isr api implementations
 bad_rtos_status_t task_unblock_from_isr(bad_task_handle_t handle)
 {
-    if(!in_isr())
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
+    if(in_isr())
     {
-        return BAD_RTOS_STATUS_WRONG_CONTEXT;
+        bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+        
+        if(__TASK_HANDLE_IS_VALID(tcb,handle))
+            ret = __kernel_notify(BAD_ISR_OP_TASK_UNBLOCK,(void*)handle.val); 
+        else
+            ret = BAD_RTOS_STATUS_HANDLE_INVALID;
+    }
+    else
+    {
+        ret = BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
-    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
-    {
-        return BAD_RTOS_STATUS_HANDLE_INVALID;
-    }
-    
-    return __kernel_notify(BAD_ISR_OP_TASK_UNBLOCK,(void*)handle.val);
+    return ret; 
 }
 
 bad_rtos_status_t task_delay_cancel_from_isr(bad_task_handle_t handle)
 {
-    if(!in_isr())
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_WRONG_CONTEXT;
+    
+    if(in_isr())
     {
-        return BAD_RTOS_STATUS_WRONG_CONTEXT;
+        bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+        
+        if(__TASK_HANDLE_IS_VALID(tcb,handle))
+            ret = __kernel_notify(BAD_ISR_OP_TASK_DELAY_CANCEL,(void*)handle.val); 
+        else
+            ret = BAD_RTOS_STATUS_HANDLE_INVALID;
+    }
+    else
+    {
+        ret = BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
     
-    bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
-    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
-    {
-        return BAD_RTOS_STATUS_HANDLE_INVALID;
-    }
-    
-    return __kernel_notify(BAD_ISR_OP_TASK_DELAY_CANCEL,(void*)handle.val);
+    return ret;
 }
 
 //Core api implenetations
@@ -3263,82 +3325,84 @@ BAD_RTOS_STATIC void  __task_block()
 BAD_RTOS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle)
 {
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
-    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
+    if(__TASK_HANDLE_IS_VALID(tcb,handle))
     {
-        return BAD_RTOS_STATUS_HANDLE_INVALID;
+        ret = __remove_entry(tcb, BAD_RTOS_MISC_BLOCKEDQ_MEMBER);
+        
+        if(ret  == BAD_RTOS_STATUS_OK)
+            __sched_try_preempt(tcb);
+        else
+            ret = BAD_RTOS_STATUS_NOT_BLOCKED;
+    }
+    else
+    {
+        ret = BAD_RTOS_STATUS_HANDLE_INVALID;
     }
     
-    if(__remove_entry(tcb, BAD_RTOS_MISC_BLOCKEDQ_MEMBER) != BAD_RTOS_STATUS_OK)
-    {
-        return BAD_RTOS_STATUS_NOT_BLOCKED;
-    }
-    
-    __sched_try_preempt(tcb);
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle)
 {
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
-    if(!__TASK_HANDLE_IS_VALID(tcb,handle))
+    if(__TASK_HANDLE_IS_VALID(tcb,handle))
     {
-        return BAD_RTOS_STATUS_HANDLE_INVALID;
+        ret = __delayq_dequeue(tcb);
+        
+        if(ret == BAD_RTOS_STATUS_OK)
+        {
+            tcb->cbptr = 0;
+            tcb->args = 0;
+            *(tcb->sp + 9) = BAD_RTOS_STATUS_WOKEN;
+            
+            __sched_try_preempt(tcb);
+        }
+        else
+        {
+            ret = BAD_RTOS_STATUS_NOT_DELAYED;
+        }
     }
     
-    if(__delayq_dequeue(tcb)!= BAD_RTOS_STATUS_OK)
-    {
-        return BAD_RTOS_STATUS_NOT_DELAYED;
-    }
-    
-    tcb->cbptr = 0;
-    tcb->args = 0;
-    *(tcb->sp+9) = BAD_RTOS_STATUS_WOKEN;
-    
-    __sched_try_preempt(tcb);
     return BAD_RTOS_STATUS_OK;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __task_yield()
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     u32 top_ready_prio = __get_top_ready_prio();
     
     if(top_ready_prio == kernel_cb.curr->raised_priority && !preempt_count)
     {
         __readyq_enqueue(kernel_cb.curr);
         __sched_update(__readyq_dequeue_head());
-        return BAD_RTOS_STATUS_OK;
     }
     else
     {
-        return BAD_RTOS_STATUS_CANT_YIELD;
+        ret = BAD_RTOS_STATUS_CANT_YIELD;
     }
+    
+    return ret;
 }
 
 BAD_RTOS_STATIC void __task_finish()
 {
 #ifdef BAD_RTOS_USE_MUTEX
     if(kernel_cb.curr->mutex_count) //trap when task want to finish without releasing mutexes
-    {
         __builtin_trap();
-        return;
-    }
 #endif 
     
 #ifdef BAD_RTOS_USE_MSGQ
     if(kernel_cb.curr->msgq_owner)
-    {
         __builtin_trap();
-        return;
-    }
 #endif
     
 #if defined (BAD_RTOS_USE_KHEAP)
     if(kernel_cb.curr->dyn_stack) //free the dynamically allocated stack 
-    {
         __kernel_free((void*)kernel_cb.curr->stack,kernel_cb.curr->stack_size);
-    }
 #endif
     
     for(u32 i = 0; i < ARRAY_SIZE(kernel_cb.curr->owned_irqs); i++)
@@ -3370,9 +3434,7 @@ BAD_RTOS_STATIC void __task_delay(u32 delay,cbptr cb, void* args)
 BAD_RTOS_STATIC void __kernel_start()
 {
     if(kernel_cb.is_running)
-    {
         __builtin_trap();
-    }
     
     kernel_cb.is_running = 1;
     
@@ -3391,7 +3453,8 @@ BAD_RTOS_STATIC void __kernel_start()
 
 BAD_RTOS_STATIC s32 __irq_find(s32 irqn)
 {
-    u32 slot;
+    u32 slot = 0;
+    
     for(slot = 0; slot < ARRAY_SIZE(kernel_cb.curr->owned_irqs); slot++)
     {
         if(irqn == kernel_cb.curr->owned_irqs[slot])
@@ -3403,41 +3466,46 @@ BAD_RTOS_STATIC s32 __irq_find(s32 irqn)
 
 BAD_RTOS_STATIC u32 __irq_check(s32 irqn)
 {
-    if(irqn == -1)
-        return 0;
+    u32 ret = 0;
     
-    u32 slot = __irq_find(irqn);
+    if(irqn != -1)
+    {
+        u32 slot = __irq_find(irqn);
+        ret = slot != ARRAY_SIZE(kernel_cb.curr->owned_irqs); 
+    }
     
-    if(slot == ARRAY_SIZE(kernel_cb.curr->owned_irqs))
-        return 0;
-    else
-        return 1;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_acquire(s32 irqn)
 {
-    if(kernel_cb.curr->irqs_allocated == ARRAY_SIZE(kernel_cb.curr->owned_irqs))
-        return BAD_RTOS_STATUS_ALLOC_FAIL;
-    
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     u32 pos = irqn + 16;
     
-    if(irqn < -16 || 
-       pos == BAD_SCB_SVC_INTR || 
-       pos == BAD_SCB_PENDSV_INTR ||
-       pos == BAD_SCB_SYSTICK_INTR ||
-       pos >= BAD_RTOS_IRQ_COUNT)
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
-    
+    if(kernel_cb.curr->irqs_allocated == ARRAY_SIZE(kernel_cb.curr->owned_irqs))
+    {
+        ret = BAD_RTOS_STATUS_ALLOC_FAIL;
+    }
+    else if(irqn < -16 || 
+            pos == BAD_SCB_SVC_INTR || 
+            pos == BAD_SCB_PENDSV_INTR ||
+            pos == BAD_SCB_SYSTICK_INTR ||
+            pos >= BAD_RTOS_IRQ_COUNT)
+    {
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+    }
+    else
     {
         u32 word_idx = pos / 32;
         u32 bit_idx = pos % 32;
         
         if(kernel_cb.irq_bmask[word_idx] & (1U << bit_idx))
-            return BAD_RTOS_STATUS_ALLOC_FAIL;
-        
-        kernel_cb.irq_bmask[word_idx] |= (1U << bit_idx);
+            ret = BAD_RTOS_STATUS_ALLOC_FAIL;
+        else
+            kernel_cb.irq_bmask[word_idx] |= (1U << bit_idx);
     }
     
+    if(ret == BAD_RTOS_STATUS_OK)
     {
         u32 slot = __irq_find(-1);
         
@@ -3448,144 +3516,179 @@ BAD_RTOS_STATIC bad_rtos_status_t __irq_acquire(s32 irqn)
         kernel_cb.curr->irqs_allocated++;
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_enable(s32 irqn)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     s32 real_irqn = irqn + 16;
     
     if(!__irq_check(real_irqn))
-        return BAD_RTOS_STATUS_NOT_OWNER;
-    
-    if(real_irqn < 16)
     {
-        if(real_irqn < 3)
-            __scb_enable_fault(real_irqn);
-        else
-            return BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
     }
     else
     {
-        __nvic_enable_interrupt(real_irqn);
+        if(real_irqn < 16)
+        {
+            if(real_irqn < 3)
+                __scb_enable_fault(real_irqn);
+            else
+                ret = BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        }
+        else
+        {
+            __nvic_enable_interrupt(real_irqn);
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_disable(s32 irqn)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     s32 real_irqn = irqn + 16;
     
     if(!__irq_check(real_irqn))
-        return BAD_RTOS_STATUS_NOT_OWNER;
-    
-    if(real_irqn < 16)
     {
-        if(real_irqn < 3)
-            __scb_disable_fault(real_irqn);
-        else
-            return BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
     }
     else
     {
-        __nvic_disable_interrupt(real_irqn);
+        if(real_irqn < 16)
+        {
+            if(real_irqn < 3)
+                __scb_disable_fault(real_irqn);
+            else
+                ret = BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        }
+        else
+        {
+            __nvic_disable_interrupt(real_irqn);
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_pend(s32 irqn)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     s32 real_irqn = irqn + 16;
     
     if(!__irq_check(real_irqn))
-        return BAD_RTOS_STATUS_NOT_OWNER;
-    
-    if(real_irqn < 16)
     {
-        if(real_irqn < 3)
-            __scb_pend_fault(real_irqn);
-        else
-            return BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
     }
     else
     {
-        __nvic_pend_interrupt(real_irqn);
+        if(real_irqn < 16)
+        {
+            if(real_irqn < 3)
+                __scb_pend_fault(real_irqn);
+            else
+                ret = BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        }
+        else
+        {
+            __nvic_pend_interrupt(real_irqn);
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_clear(s32 irqn)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     s32 real_irqn = irqn + 16;
     
     if(!__irq_check(real_irqn))
-        return BAD_RTOS_STATUS_NOT_OWNER;
-    
-    if(real_irqn < 16)
     {
-        if(real_irqn < 3)
-            __scb_clear_fault(real_irqn);
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
+    }
+    else 
+    {
+        if(real_irqn < 16)
+        {
+            if(real_irqn < 3)
+                __scb_clear_fault(real_irqn);
+            else
+                ret = BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        }
         else
-            return BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
-    }
-    else
-    {
-        __nvic_clear_interrupt(real_irqn);
+        {
+            __nvic_clear_interrupt(real_irqn);
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_set_prio(s32 irqn, u8 prio)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     s32 real_irqn = irqn + 16;
     
     if(!__irq_check(real_irqn))
-        return BAD_RTOS_STATUS_NOT_OWNER;
-    
-    if((1U << BAD_RTOS_PRIO_BITS) - 1 < prio)
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
-    
-    if(real_irqn < 16)
     {
-        if(real_irqn < 3)
-            __scb_set_core_interrupt_priority(real_irqn,prio);
-        else
-            return BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
+    } 
+    else if((1U << BAD_RTOS_PRIO_BITS) - 1 < prio)
+    {
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
     else
     {
-        __nvic_set_interrupt_priority(real_irqn,prio);
+        if(real_irqn < 16)
+        {
+            if(real_irqn < 3)
+                __scb_set_core_interrupt_priority(real_irqn,prio);
+            else
+                ret = BAD_RTOS_STATUS_BAD_PARAMETERS; //TODO: other interrupts NIY
+        }
+        else
+        {
+            __nvic_set_interrupt_priority(real_irqn,prio);
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __irq_release(s32 irqn)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     s32 real_irqn = irqn + 16;
     
     if(real_irqn == -1)
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+    {
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+    }
+    else
+    {
+        u32 slot = __irq_find(real_irqn);
+        
+        if(slot == ARRAY_SIZE(kernel_cb.curr->owned_irqs))
+        {
+            ret = BAD_RTOS_STATUS_NOT_OWNER;
+        }
+        else
+        {
+            u32 pos = kernel_cb.curr->owned_irqs[slot];
+            
+            u32 word_idx = pos / 32;
+            u32 bit_idx = pos % 32;
+            kernel_cb.irq_bmask[word_idx] &= ~(1U << bit_idx);
+            
+            kernel_cb.curr->owned_irqs[slot] = -1;
+            kernel_cb.curr->irqs_allocated--;
+        }
+    }
     
-    u32 slot = __irq_find(real_irqn);
-    
-    if(slot == ARRAY_SIZE(kernel_cb.curr->owned_irqs))
-        return BAD_RTOS_STATUS_NOT_OWNER;
-    
-    u32 pos = kernel_cb.curr->owned_irqs[slot];
-    
-    u32 word_idx = pos / 32;
-    u32 bit_idx = pos % 32;
-    kernel_cb.irq_bmask[word_idx] &= ~(1U << bit_idx);
-    
-    kernel_cb.curr->owned_irqs[slot] = -1;
-    kernel_cb.curr->irqs_allocated--;
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 void preempt_disable()
@@ -3704,21 +3807,20 @@ void bad_rtos_start()
 BAD_RTOS_STATIC bad_tcb_t* __synchro_wake(bad_link_node_t *q,cbptr cb,bad_rtos_status_t status)
 {
     bad_tcb_t *tcb = __prio_list_dequeue_head(q);
-    if(!tcb)
+    
+    if(tcb)
     {
-        return 0;
+        if(tcb->cbptr == cb)
+        {
+            __delayq_dequeue(tcb);
+            tcb->cbptr = 0;
+            tcb->args = 0;
+        }
+        
+        *(tcb->sp+9) = status;
+        
+        __sched_try_preempt(tcb);
     }
-    
-    if(tcb->cbptr == cb)
-    {
-        __delayq_dequeue(tcb);
-        tcb->cbptr = 0;
-        tcb->args = 0;
-    }
-    
-    *(tcb->sp+9) = status;
-    
-    __sched_try_preempt(tcb);
     
     return tcb;
 }
@@ -3727,6 +3829,7 @@ BAD_RTOS_STATIC void __synchro_wake_all(bad_link_node_t *q,cbptr cb, u32 status)
 {
     bad_tcb_t *traverse = 0;
     bad_tcb_t *safe = 0;
+    
     dlist_iter_all_safe_cast(traverse,safe,q,qnode)
     {
         *(traverse->sp+9) = status;
@@ -3750,22 +3853,26 @@ BAD_RTOS_STATIC void __synchro_wake_all(bad_link_node_t *q,cbptr cb, u32 status)
 
 BAD_RTOS_STATIC  bad_rtos_status_t __synchro_block(bad_link_node_t *q, cbptr cb, u32 delay, bad_rtos_misc_t misc)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(delay == UINT32_MAX)
     {
-        return BAD_RTOS_STATUS_WOULD_BLOCK;
+        ret = BAD_RTOS_STATUS_WOULD_BLOCK;
     }
-    
-    if(delay)
+    else
     {
-        kernel_cb.curr->args = q; //every synchro obj has blockedq as first element
-        kernel_cb.curr->cbptr = cb;
-        __delayq_enqueue(kernel_cb.curr, delay);
+        if(delay)
+        {
+            kernel_cb.curr->args = q; //every synchro obj has blockedq as first element
+            kernel_cb.curr->cbptr = cb;
+            __delayq_enqueue(kernel_cb.curr, delay);
+        }
+        
+        __prio_list_enqueue(q,kernel_cb.curr, misc);
+        __sched_update(__readyq_dequeue_head());
     }
     
-    __prio_list_enqueue(q,kernel_cb.curr, misc);
-    __sched_update(__readyq_dequeue_head());
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 // Synchro objects api implenetations
@@ -3776,146 +3883,166 @@ BAD_RTOS_STATIC void __msgq_timeout_cb(bad_task_handle_t handle ,void *msgq)
     (void)msgq;
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     __remove_entry(tcb,BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
-    *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
+    *(tcb->sp + 9) = BAD_RTOS_STATUS_TIMEOUT;
 }
 
 #ifdef BAD_RTOS_USE_KHEAP
 
 BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire_allocate(bad_msgq_t *q,u32 capacity)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!q || q->capacity_mask || (capacity & (capacity - 1)))
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(q->owner)
+    else if(q->owner)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
+    }
+    else
+    {
+        kernel_cb.curr->msgq_owner++;
+        q->msgs = __kernel_alloc(capacity);
+        q->owner = kernel_cb.curr;
+        q->dynamic = 1;
+        q->blockedq = DLIST_INITIALISER(q->blockedq);
+        q->head = q->tail = 0;
+        BAD_OPT_BARRIER;
+        
+        q->capacity_mask = capacity - 1;
     }
     
-    kernel_cb.curr->msgq_owner++;
-    q->msgs = __kernel_alloc(capacity);
-    q->owner = kernel_cb.curr;
-    q->dynamic = 1;
-    q->blockedq = DLIST_INITIALISER(q->blockedq);
-    q->head = q->tail = 0;
-    BAD_OPT_BARRIER;
-    
-    q->capacity_mask = capacity - 1;
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
-BAD_RTOS_STATIC bad_rtos_status_t __msgq_release_deallocate(bad_msgq_t *q){
+BAD_RTOS_STATIC bad_rtos_status_t __msgq_release_deallocate(bad_msgq_t *q)
+{
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!q || !q->dynamic)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(q->owner != kernel_cb.curr)
+    else if(q->owner != kernel_cb.curr)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
+    }
+    else
+    {
+        kernel_cb.curr->msgq_owner--;
+        u32 capacity = q->capacity_mask + 1;
+        
+        q->capacity_mask = 0;
+        BAD_OPT_BARRIER;
+        
+        __kernel_free(q->msgs,capacity);
+        __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
+        
+        *q = (bad_msgq_t){0};
     }
     
-    kernel_cb.curr->msgq_owner--;
-    u32 capacity = q->capacity_mask + 1;
-    
-    q->capacity_mask = 0;
-    BAD_OPT_BARRIER;
-    __kernel_free(q->msgs,capacity);
-    __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
-    
-    *q = (bad_msgq_t){0};
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 #endif
 
-BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire(bad_msgq_t *q){
+BAD_RTOS_STATIC bad_rtos_status_t __msgq_acquire(bad_msgq_t *q)
+{
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!q)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(q->owner)
+    else if(q->owner)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
+    }
+    else
+    {
+        q->owner = kernel_cb.curr;
+        kernel_cb.curr->msgq_owner++;
     }
     
-    q->owner = kernel_cb.curr;
-    kernel_cb.curr->msgq_owner++;
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __msgq_release(bad_msgq_t *q)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!q)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(q->owner != kernel_cb.curr)
+    else if(q->owner != kernel_cb.curr)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
+    }
+    else
+    {
+        q->owner = 0;
+        kernel_cb.curr->msgq_owner--;
+        
+        volatile u32 *atomic_update = (volatile u32 *)&q->head; 
+        *atomic_update = 0;
+        
+        __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
     }
     
-    q->owner = 0;
-    kernel_cb.curr->msgq_owner--;
-    volatile u32 *atomic_update = (volatile u32 *)&q->head; 
-    *atomic_update = 0;
-    __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 bad_rtos_status_t __msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback,u32 delay)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!q || !writeback)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!q->capacity_mask)
+    else if(!q->capacity_mask)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    if(q->owner != kernel_cb.curr)
+    else if(q->owner != kernel_cb.curr)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
     }
-    
-    if(q->tail == q->head)
+    else if(q->tail == q->head)
     {
-        return __synchro_block(&q->blockedq,__msgq_timeout_cb,delay, BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
-    }
-    
-    *writeback = *(q->msgs + q->tail);
-    BAD_OPT_BARRIER;
-    bad_tcb_t *tcb = __synchro_wake(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_OK);
-    
-    if(tcb)
-    {
-        u16 next_tail = (q->tail + 1) & q->capacity_mask;
-        u16 next_head = (q->head + 1) & q->capacity_mask;
-        
-        u32 signal = *(tcb->sp + 10);
-        void *args = (void *)*(tcb->sp + 11);
-        
-        bad_msg_block_t *block = q->msgs + q->head;
-        block->signal = signal;
-        block->args = args;
-        BAD_OPT_BARRIER;
-        
-        volatile u32 *atomic_update = (volatile u32 *)&q->head;
-        *atomic_update = next_head | (next_tail << 16);
+        ret = __synchro_block(&q->blockedq,__msgq_timeout_cb,delay, BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
     }
     else
     {
-        q->tail = (q->tail + 1) & q->capacity_mask;
+        *writeback = *(q->msgs + q->tail);
+        BAD_OPT_BARRIER;
+        bad_tcb_t *tcb = __synchro_wake(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_OK);
+        
+        if(tcb)
+        {
+            u16 next_tail = (q->tail + 1) & q->capacity_mask;
+            u16 next_head = (q->head + 1) & q->capacity_mask;
+            
+            u32 signal = *(tcb->sp + 10);
+            void *args = (void *) *(tcb->sp + 11);
+            
+            bad_msg_block_t *block = q->msgs + q->head;
+            block->signal = signal;
+            block->args = args;
+            BAD_OPT_BARRIER;
+            
+            volatile u32 *atomic_update = (volatile u32 *)&q->head;
+            *atomic_update = next_head | (next_tail << 16);
+        }
+        else
+        {
+            q->tail = (q->tail + 1) & q->capacity_mask;
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC void __msgq_try_wake(bad_msgq_t *q)
@@ -3934,87 +4061,98 @@ BAD_RTOS_STATIC void __msgq_try_wake(bad_msgq_t *q)
 
 bad_rtos_status_t __msgq_post_msg(bad_msgq_t *q, u32 signal, void *args,u32 delay)
 {
-    u16 head,next_head;
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
     if(!q)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!q->capacity_mask)
+    else if(!q->capacity_mask)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    do
+    else
     {
-        head = __ldrexh(&q->head);
-        next_head = (head+1) & q->capacity_mask;
+        u16 next_head = 0;
+        u16 head = 0;
         
-        if(q->tail == next_head)
+        do
         {
-            __clrex();
-            return __synchro_block(&q->blockedq,__msgq_timeout_cb,delay, BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
+            head = __ldrexh(&q->head);
+            next_head = (head + 1) & q->capacity_mask;
+            
+            if(q->tail == next_head)
+            {
+                __clrex();
+                ret = __synchro_block(&q->blockedq,__msgq_timeout_cb,delay, BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
+                goto exit;
+            }
+        }
+        while(__strexh(next_head, &q->head)); 
+        
+        bad_msg_block_t* block = q->msgs+head;
+        
+        block->signal = signal;
+        block->args = args;
+        
+        if(head == q->tail)
+        {
+            __msgq_try_wake(q); 
         }
     }
-    while(__strexh(next_head, &q->head)); 
     
-    bad_msg_block_t* block = q->msgs+head;
-    
-    block->signal = signal;
-    block->args = args;
-    
-    if(head == q->tail)
-    {
-        __msgq_try_wake(q); 
-    }
-    
-    return BAD_RTOS_STATUS_OK;
+    exit:
+    return ret;
 }
 
 bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!in_isr())
     {
-        return BAD_RTOS_STATUS_WRONG_CONTEXT;
+        ret = BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
-    
-    if(!q)
+    else if(!q)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!q->capacity_mask)
+    else if(!q->capacity_mask)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    u32 head,next_head;
-    do
+    else
     {
-        head = __ldrexh(&q->head);
-        next_head = (head+1) & q->capacity_mask;
+        u32 head = 0;
+        u32 next_head = 0;
         
-        if(q->tail == next_head)
+        do
         {
-            __clrex();
-            return BAD_RTOS_STATUS_WOULD_BLOCK;
+            head = __ldrexh(&q->head);
+            next_head = (head+1) & q->capacity_mask;
+            
+            if(q->tail == next_head)
+            {
+                __clrex();
+                ret = BAD_RTOS_STATUS_WOULD_BLOCK;
+                goto exit;
+            }
         }
+        while(__strexh(next_head, &q->head)); 
         
+        bad_msg_block_t* block = q->msgs + head;
+        
+        block->signal = signal;
+        block->args = args;
+        
+        if(q->tail == head) // we may have preempted the consumer mid block, need to check in pendsv
+        {
+            ret = __kernel_notify(BAD_ISR_OP_MSGQ_WAKE,q);
+        }
     }
-    while(__strexh(next_head, &q->head)); 
     
-    bad_msg_block_t* block = q->msgs + head;
-    
-    block->signal = signal;
-    block->args = args;
-    
-    if(q->tail == head) // we may have preempted the consumer mid block, need to check in pendsv
-    {
-        return __kernel_notify(BAD_ISR_OP_MSGQ_WAKE,q);
-    }
-    return BAD_RTOS_STATUS_OK;
-    
+    exit:
+    return ret;
 }
 
 #endif
@@ -4022,162 +4160,178 @@ bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args)
 #ifdef BAD_RTOS_USE_MUTEX
 bad_rtos_status_t mutex_init(bad_mutex_t *mut)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!mut)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+    }
+    else
+    {
+        *mut = (bad_mutex_t){0};
+        mut->blockedq = DLIST_INITIALISER(mut->blockedq); 
     }
     
-    *mut = (bad_mutex_t){0};
-    mut->blockedq = DLIST_INITIALISER(mut->blockedq); 
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
-BAD_RTOS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle ,void *mutex)
+BAD_RTOS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle, void *mutex)
 {
     (void)mutex;
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     __remove_entry(tcb,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
-    *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
+    *(tcb->sp + 9) = BAD_RTOS_STATUS_TIMEOUT;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!mut)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!mut->blockedq.next)
+    else if(!mut->blockedq.next)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    if(kernel_cb.curr != mut->owner)
+    else if(kernel_cb.curr != mut->owner)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
     }
-    
-    kernel_cb.curr->mutex_count--;
-    
-    if(!kernel_cb.curr->mutex_count)
+    else
     {
-        kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
+        kernel_cb.curr->mutex_count--;
+        
+        if(!kernel_cb.curr->mutex_count)
+        {
+            kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
+        }
+        
+        __synchro_wake_all(&mut->blockedq,__mutex_timeout_cb,BAD_RTOS_STATUS_DELETED);
+        
+        *mut = (bad_mutex_t){0};
     }
     
-    __synchro_wake_all(&mut->blockedq,__mutex_timeout_cb,BAD_RTOS_STATUS_DELETED);
-    
-    *mut = (bad_mutex_t){0};
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __mutex_take(bad_mutex_t *mut, u32 delay)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!mut)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!mut->blockedq.next)
+    else if(!mut->blockedq.next)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    if(!mut->owner)
+    else
     {
-        mut->owner = kernel_cb.curr;
-        kernel_cb.curr->mutex_count++;
-        return BAD_RTOS_STATUS_OK;
+        if(!mut->owner)
+        {
+            mut->owner = kernel_cb.curr;
+            kernel_cb.curr->mutex_count++;
+        }
+        else if(mut->owner == kernel_cb.curr)
+        {
+            mut->rec_takes++;
+        }
+        else
+        {
+            if(kernel_cb.curr->raised_priority < mut->owner->raised_priority && delay != UINT32_MAX)
+            {
+                bad_rtos_status_t ret = __readyq_dequeue(mut->owner); 
+                
+                mut->owner->raised_priority = kernel_cb.curr->raised_priority;
+                
+                if(ret == BAD_RTOS_STATUS_OK)
+                    __readyq_enqueue(mut->owner);
+            }
+            
+            ret = __synchro_block(&mut->blockedq,__mutex_timeout_cb,delay, BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
+        }
     }
     
-    if(mut->owner == kernel_cb.curr)
-    {
-        mut->rec_takes++;
-        return BAD_RTOS_STATUS_OK;
-    }
-    
-    if(kernel_cb.curr->raised_priority < mut->owner->raised_priority)
-    {
-        bad_rtos_status_t ret = __readyq_dequeue(mut->owner); 
-        
-        mut->owner->raised_priority = kernel_cb.curr->raised_priority;
-        
-        if(ret == BAD_RTOS_STATUS_OK)
-            __readyq_enqueue(mut->owner);
-    }
-    
-    return __synchro_block(&mut->blockedq,__mutex_timeout_cb,delay, BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
+    return ret;
 }   
 
 BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!mut)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!mut->blockedq.next)
+    else if(!mut->blockedq.next)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    if(kernel_cb.curr!= mut->owner)
+    else if(kernel_cb.curr!= mut->owner)
     {
-        return BAD_RTOS_STATUS_NOT_OWNER;
+        ret = BAD_RTOS_STATUS_NOT_OWNER;
     }
-    
-    if(mut->rec_takes)
+    else
     {
-        mut->rec_takes--;
-        return BAD_RTOS_STATUS_OK;
-    }
-    
-    u32 last_mutex =  !--kernel_cb.curr->mutex_count;
-    if(last_mutex)
-    {
-        kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
-    }
-    
-    mut->owner = __prio_list_dequeue_head(&mut->blockedq); 
-    
-    if(mut->owner)
-    {
-        bad_tcb_t *tcb = mut->owner;
-        
-        tcb->mutex_count++;
-        
-        if(tcb->cbptr == __mutex_timeout_cb)
+        if(mut->rec_takes)
         {
-            __delayq_dequeue(mut->owner);
-            tcb->cbptr = 0;
-            tcb->args = 0;
+            mut->rec_takes--;
         }
-        
-        *(tcb->sp + 9) = BAD_RTOS_STATUS_OK;
-        
-        __readyq_enqueue(mut->owner);
+        else
+        {
+            u32 last_mutex =  !--kernel_cb.curr->mutex_count;
+            if(last_mutex)
+                kernel_cb.curr->raised_priority = kernel_cb.curr->base_priority;
+            
+            mut->owner = __prio_list_dequeue_head(&mut->blockedq); 
+            
+            if(mut->owner)
+            {
+                bad_tcb_t *tcb = mut->owner;
+                
+                tcb->mutex_count++;
+                
+                if(tcb->cbptr == __mutex_timeout_cb)
+                {
+                    __delayq_dequeue(mut->owner);
+                    tcb->cbptr = 0;
+                    tcb->args = 0;
+                }
+                
+                *(tcb->sp + 9) = BAD_RTOS_STATUS_OK;
+                
+                __readyq_enqueue(mut->owner);
+            }
+            
+            if(last_mutex || mut->owner)
+                __sched_try_update();
+        }
     }
     
-    if(last_mutex || mut->owner)
-        __sched_try_update();
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
 bad_rtos_status_t sem_init(bad_sem_t *sem, u32 reset_value)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!sem)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
+    }
+    else
+    {
+        sem->blockedq = DLIST_INITIALISER(sem->blockedq);
+        sem->counter = reset_value;
+        sem->init_flag = 1;
     }
     
-    sem->blockedq = DLIST_INITIALISER(sem->blockedq);
-    sem->counter = reset_value;
-    sem->init_flag = 1;
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore)
@@ -4190,149 +4344,177 @@ BAD_RTOS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore)
 
 BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!sem)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!sem->init_flag)
+    else if(!sem->init_flag)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
+    }
+    else
+    {
+        __synchro_wake_all(&sem->blockedq,__sem_timeout_cb,BAD_RTOS_STATUS_DELETED);
+        
+        *sem = (bad_sem_t){0};
     }
     
-    __synchro_wake_all(&sem->blockedq,__sem_timeout_cb,BAD_RTOS_STATUS_DELETED);
-    
-    *sem = (bad_sem_t){0};
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 bad_rtos_status_t sem_take(bad_sem_t *sem,u32 delay)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!sem)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!sem->init_flag)
+    else if(!sem->init_flag)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    u32 counter;
-    do
+    else
     {
-        counter = __ldrex(&sem->counter);
+        u32 counter = 0;
         
-        if(!counter)
+        do
         {
-            __clrex();
-            if(delay == UINT32_MAX)
-            {
-                return BAD_RTOS_STATUS_WOULD_BLOCK;
-            }
+            counter = __ldrex(&sem->counter);
             
-            return __svc_sem_take(sem,delay);
+            if(!counter)
+            {
+                __clrex();
+                
+                if(delay == UINT32_MAX)
+                    ret = BAD_RTOS_STATUS_WOULD_BLOCK; 
+                else
+                    ret = __svc_sem_take(sem,delay);
+                
+                goto exit;
+            }
         }
+        while(__strex(counter - 1, &sem->counter));
     }
-    while(__strex(counter-1, &sem->counter));
     
-    return BAD_RTOS_STATUS_OK;
+    exit:
+    return ret;
 }
 
 bad_rtos_status_t sem_put(bad_sem_t *sem)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!sem)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!sem->init_flag)
+    else if(!sem->init_flag)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    u32 counter;
-    do
+    else
     {
-        counter = __ldrex(&sem->counter);
-        if(VOLATILE_READ(sem->blockedq.next) != &sem->blockedq)
+        u32 counter = 0;
+        
+        do
         {
-            __clrex();
-            return __svc_sem_put(sem);
+            counter = __ldrex(&sem->counter);
+            
+            if(VOLATILE_READ(sem->blockedq.next) != &sem->blockedq)
+            {
+                __clrex();
+                
+                ret = __svc_sem_put(sem);
+                goto exit;
+            }
         }
-    }while(__strex(counter + 1, &sem->counter));
+        while(__strex(counter + 1, &sem->counter));
+    }
     
-    return BAD_RTOS_STATUS_OK;
+    exit:
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __sem_put(bad_sem_t *sem)
 {
     bad_tcb_t *tcb = __synchro_wake(&sem->blockedq,__sem_timeout_cb,BAD_RTOS_STATUS_OK);
     
-    if(tcb)
+    if(!tcb)
     {
-        return BAD_RTOS_STATUS_OK;
+        u32 counter = 0;
+        
+        do
+        {
+            counter = __ldrex(&sem->counter);
+        }
+        while(__strex(counter + 1, &sem->counter));
     }
-    
-    u32 counter;
-    do
-    {
-        counter = __ldrex(&sem->counter);
-    }
-    while(__strex(counter + 1, &sem->counter));
     
     return BAD_RTOS_STATUS_OK;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __sem_take(bad_sem_t *sem, u32 delay)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!sem->counter)
     {
-        return __synchro_block(&sem->blockedq, __sem_timeout_cb, delay, BAD_RTOS_MISC_SEM_BLOCKEDQ_MEMBER);
+        ret = __synchro_block(&sem->blockedq, __sem_timeout_cb, delay, BAD_RTOS_MISC_SEM_BLOCKEDQ_MEMBER);
     }
-    
-    u32 counter;
-    do
+    else
     {
-        counter = __ldrex(&sem->counter);
+        u32 counter = 0;
+        
+        do
+        {
+            counter = __ldrex(&sem->counter);
+        }
+        while(__strex(counter - 1, &sem->counter));
     }
-    while(__strex(counter - 1, &sem->counter));
     
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 } 
 
 bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!in_isr())
     {
-        return BAD_RTOS_STATUS_WRONG_CONTEXT;
+        ret = BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
-    
-    if(!sem)
+    else if(!sem)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!sem->init_flag)
+    else if(!sem->init_flag)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    u32 counter;
-    do
+    else
     {
-        counter = __ldrex(&sem->counter);
+        u32 counter;
         
-        if(!counter)
+        do
         {
-            __clrex();
-            return __kernel_notify(BAD_ISR_OP_SEM_PUT,sem);
+            counter = __ldrex(&sem->counter);
+            
+            if(!counter)
+            {
+                __clrex();
+                
+                ret = __kernel_notify(BAD_ISR_OP_SEM_PUT,sem);
+                goto exit;
+            }
         }
+        while(__strex(counter + 1, &sem->counter));
     }
-    while(__strex(counter+1, &sem->counter));
     
-    return BAD_RTOS_STATUS_OK;
+    exit:
+    return ret;
 }
 #endif
 
@@ -4345,96 +4527,114 @@ static void __event_barrier_timeout_cb(bad_task_handle_t handle ,void *event_bar
     
     __remove_entry(tcb,BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER);
     
-    *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
+    *(tcb->sp + 9) = BAD_RTOS_STATUS_TIMEOUT;
 }
 
 bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!event_barrier|| !count || count >= 32)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(event_barrier->count && event_barrier->count != 32)
+    else if(event_barrier->count && event_barrier->count != 32)
     {
-        return BAD_RTOS_STATUS_IN_USE;
+        ret = BAD_RTOS_STATUS_IN_USE;
+    }
+    else
+    {
+        *event_barrier = (bad_event_barrier_t){0};
+        event_barrier->blockedq = DLIST_INITIALISER(event_barrier->blockedq);
+        BAD_OPT_BARRIER;
+        
+        event_barrier->count = count;
     }
     
-    *event_barrier = (bad_event_barrier_t){0};
-    event_barrier->blockedq = DLIST_INITIALISER(event_barrier->blockedq);
-    BAD_OPT_BARRIER;
-    
-    event_barrier->count = count;
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 
 BAD_RTOS_STATIC u32 __event_barrier_wait(bad_event_barrier_t *event_barrier,u32 delay)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!event_barrier)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!event_barrier->count)
+    else if(!event_barrier->count)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    if(event_barrier->count == 32)
+    else if(event_barrier->count == 32)
     {
-        return BAD_RTOS_STATUS_FIRED;
+        ret = BAD_RTOS_STATUS_FIRED;
+    }
+    else
+    {
+        ret = __synchro_block(&event_barrier->blockedq,__event_barrier_timeout_cb,delay, BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER);
     }
     
-    return __synchro_block(&event_barrier->blockedq,__event_barrier_timeout_cb,delay, BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER);
+    return ret; 
 }
 
 bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier,u32 flag)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!in_isr())
     {
-        return BAD_RTOS_STATUS_WRONG_CONTEXT;
+        ret = BAD_RTOS_STATUS_WRONG_CONTEXT;
     }
-    
-    if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK)
+    else if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!event_barrier->count)
+    else if(!event_barrier->count)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
     }
-    
-    u32 flags,new_flags;
-    do
+    else
     {
-        flags = __ldrex(&event_barrier->flags);
+        u32 flags = 0;
+        u32 new_flags = 0;
         
-        if(event_barrier->count == 32)
+        do
         {
-            __clrex();
-            return BAD_RTOS_STATUS_FIRED;
+            flags = __ldrex(&event_barrier->flags);
+            
+            if(event_barrier->count == 32)
+            {
+                __clrex();
+                
+                ret = BAD_RTOS_STATUS_FIRED;
+                goto exit;
+            }
+            
+            new_flags = flags | flag;
+            
+            if(new_flags == flags)
+            {
+                __clrex();
+                
+                ret = BAD_RTOS_STATUS_OK;
+                goto exit;
+            }
         }
+        while(__strex(new_flags, &event_barrier->flags));
         
-        new_flags = flags | flag;
-        
-        if(new_flags == flags)
+        if(__builtin_popcount(new_flags) == event_barrier->count)
         {
-            __clrex();
-            return BAD_RTOS_STATUS_OK;
+            event_barrier->count = 32;
+            BAD_OPT_BARRIER;
+            
+            event_barrier->flags = new_flags;//report correct flags on wakeup
+            ret = __kernel_notify(BAD_ISR_OP_EVENT_BARRIER_WAKE,event_barrier);
         }
-    }while(__strex(new_flags, &event_barrier->flags));
-    
-    if(__builtin_popcount(new_flags) == event_barrier->count)
-    {
-        event_barrier->count = 32;
-        BAD_OPT_BARRIER;
-        
-        event_barrier->flags = new_flags;//report correct flags on wakeup
-        return __kernel_notify(BAD_ISR_OP_EVENT_BARRIER_WAKE,event_barrier);
     }
     
-    return BAD_RTOS_STATUS_OK;
+    exit:
+    return ret;
 }
 
 BAD_RTOS_STATIC void __event_barrier_wake(bad_event_barrier_t *event_barrier)
@@ -4446,66 +4646,77 @@ BAD_RTOS_STATIC void __event_barrier_wake(bad_event_barrier_t *event_barrier)
 
 BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_fire(bad_event_barrier_t *event_barrier,u32 flag)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!event_barrier ||!flag ||flag == EVENT_BARRIER_FLAGS_VALID_MASK)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!event_barrier->count)
+    else if(!event_barrier->count)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED; 
-    }    
-    
-    u32 flags,new_flags;
-    do
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED; 
+    }
+    else
     {
-        flags = __ldrex(&event_barrier->flags);
-        
-        if(event_barrier->count == 32)
+        u32 flags,new_flags;
+        do
         {
-            __clrex();
-            return BAD_RTOS_STATUS_FIRED;
+            flags = __ldrex(&event_barrier->flags);
+            
+            if(event_barrier->count == 32)
+            {
+                __clrex();
+                
+                ret = BAD_RTOS_STATUS_FIRED;
+                goto exit;
+            }
+            
+            new_flags = flags | flag;
+            
+            if(new_flags == flags)
+            {
+                __clrex();
+                
+                ret = BAD_RTOS_STATUS_OK;
+                goto exit;
+            }
         }
+        while(__strex(new_flags, &event_barrier->flags));
         
-        new_flags = flags | flag;
-        
-        if(new_flags == flags)
+        if(__builtin_popcount(new_flags) == event_barrier->count)
         {
-            __clrex();
-            return BAD_RTOS_STATUS_OK;
-        }    
-    }
-    while(__strex(new_flags, &event_barrier->flags));
-    
-    if(__builtin_popcount(new_flags) == event_barrier->count)
-    {
-        event_barrier->count = 32; 
-        BAD_OPT_BARRIER;
-        
-        event_barrier->flags = new_flags;//report correct flags on wakeup
-        __event_barrier_wake(event_barrier);
+            event_barrier->count = 32; 
+            BAD_OPT_BARRIER;
+            
+            event_barrier->flags = new_flags;//report correct flags on wakeup
+            __event_barrier_wake(event_barrier);
+        }
     }
     
-    return BAD_RTOS_STATUS_OK;
+    exit:
+    return ret;
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __event_barrier_delete(bad_event_barrier_t *event_barrier)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     if(!event_barrier)
     {
-        return BAD_RTOS_STATUS_BAD_PARAMETERS;
+        ret = BAD_RTOS_STATUS_BAD_PARAMETERS;
     }
-    
-    if(!event_barrier->count)
+    else if(!event_barrier->count)
     {
-        return BAD_RTOS_STATUS_NOT_INITIALISED;
+        ret = BAD_RTOS_STATUS_NOT_INITIALISED;
+    }
+    else
+    {
+        __synchro_wake_all(&event_barrier->blockedq,__event_barrier_timeout_cb,BAD_RTOS_STATUS_DELETED);
+        
+        *event_barrier = (bad_event_barrier_t){0};
     }
     
-    __synchro_wake_all(&event_barrier->blockedq,__event_barrier_timeout_cb,BAD_RTOS_STATUS_DELETED);
-    
-    *event_barrier = (bad_event_barrier_t){0};
-    
-    return BAD_RTOS_STATUS_OK;
+    return ret;
 }
 #endif
 

@@ -409,7 +409,7 @@ static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const b
                     break;
                 
                 u32 size = user_region->size > 32 ? user_region->size : 32;
-                u32 size_msb = find_pow2_order(size,true);
+                u32 size_msb = find_pow2_order(size,false);
                 
                 {
                     u32 addr_lowest_bit = __builtin_ctz(addr_cast);

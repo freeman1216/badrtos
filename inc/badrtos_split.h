@@ -1042,7 +1042,7 @@ Dont use this file, intended for development
 * This function must be called from an interrupt context.
 *
 * @param[in] bad_event_barrier_t* Ptr to event barrier object to fire
-* @param[in] u32 flag Bitmask representing the specific event(s) to set
+* @param[in] u32 flag Bitmap representing the specific event(s) to set
 *
 * @retval BAD_RTOS_STATUS_OK Flag successfully set (barrier may or may not have fired)
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS event_barrier is NULL, flag is 0, or flag contains invalid bits
@@ -1064,7 +1064,7 @@ Dont use this file, intended for development
 * When fired, it immediately unblocks all tasks waiting on this barrier and writes the flags state to the stacks of blocked tasks
 *
 * @param[in] bad_event_barrier_t* Ptr to event barrier object to fire
-* @param[in] u32 flag Bitmask representing the specific event(s) to set
+* @param[in] u32 flag Bitmap representing the specific event(s) to set
 *
 * @retval BAD_RTOS_STATUS_OK Flag successfully set (barrier may or may not have fired)
 * @retval BAD_RTOS_STATUS_BAD_PARAMETERS event_barrier is NULL, flag is 0, or flag contains invalid bits
@@ -1404,13 +1404,21 @@ typedef struct
     bad_tcb_t *owner;
     u16 capacity_mask;
     u16 pad;
-    volatile u16 head;
-    volatile u16 tail;
+    
+    union
+    {
+        struct
+        {
+            volatile u16 head;
+            volatile u16 tail;
+        };
+        
+        volatile u32 atomic_update;
+    };
+    
     bad_msg_block_t *msgs;
     u8 dynamic;
 } bad_msgq_t;
-
-_Static_assert(__builtin_offsetof(bad_msgq_t,head) % 4 == 0, "Message queue head member should have alignment of 4 for atomic update logic to work");
 #endif
 
 //task decription for task creation
@@ -1470,7 +1478,128 @@ _Static_assert(size >= 64,"Stacks must be at least 64 bytes to accomodate except
 u8 task_name##_stack[size] __attribute__((section(".static_stacks")));
 #endif
 
-// PUBLIC API**********************************************
+//PUBLIC API**********************************************
+//Main API
+extern void bad_rtos_start();
+
+#define BAD_TASK_HANDLE_IS_VALID(handle) ({ handle.idx != 0xFFFF; })
+
+#define BAD_TASK_HANDLE_GET_ERROR(handle) ({\
+BAD_TASK_HANDLE_IS_VALID(handle) ? BAD_RTOS_STATUS_OK : handle.gen; \
+})
+
+extern bad_task_handle_t task_make(const bad_task_descr_t *descr);
+extern bad_rtos_status_t task_delay(u32 delay, cbptr cb, void *args );
+extern bad_rtos_status_t task_block();
+extern bad_rtos_status_t task_unblock(bad_task_handle_t task);
+extern bad_rtos_status_t task_unblock_from_isr(bad_task_handle_t task);
+extern bad_rtos_status_t task_yield();
+extern bad_rtos_status_t task_finish();
+extern bad_rtos_status_t task_delay_cancel(bad_task_handle_t task);
+extern bad_rtos_status_t task_delay_cancel_from_isr(bad_task_handle_t task);
+extern bad_rtos_status_t irq_acquire(s32 irqn);
+extern bad_rtos_status_t irq_enable(s32 irqn);
+extern bad_rtos_status_t irq_disable(s32 irqn);
+extern bad_rtos_status_t irq_pend(s32 irqn);
+extern bad_rtos_status_t irq_clear(s32 irqn);
+extern bad_rtos_status_t irq_set_prio(s32 irqn, u8 prio);
+extern bad_rtos_status_t irq_release(s32 irqn);
+extern void preempt_disable();
+extern void preempt_enable();
+
+#define POOL_DECLARE_TYPE(name,type,count) \
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+u8 __attribute__((aligned(_Alignof(type)))) name##_mem[sizeof(type) * (count)];\
+bad_pool_t name = {.mem = name##_mem,.block_size = sizeof(type),.size_in_bytes = sizeof(type) * (count)};
+
+#define POOL_DECLARE_TYPE_STATIC(name,type,count) \
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+static u8 __attribute__((aligned(_Alignof(type)))) name##_mem[sizeof(type) * (count)];\
+static bad_pool_t name = {.mem = name##_mem,.block_size = sizeof(type),.size_in_bytes = sizeof(type) * (count)};
+
+#define POOL_DECLARE(name,__mem,__block_size,__size_in_bytes)\
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+bad_pool_t name = {.mem = (u8 *)__mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes};
+
+#define POOL_DECLARE_STATIC(name,__mem,__block_size,__size_in_bytes)\
+_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
+static bad_pool_t name = {.mem = (u8 *)__mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes};
+
+extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes);
+extern void* pool_alloc(bad_pool_t *pool);
+extern void pool_free(bad_pool_t *pool, void *obj);
+extern void* gpool_alloc();
+extern void gpool_free(void *obj);
+
+#ifdef BAD_RTOS_USE_KHEAP
+extern void* kernel_alloc(u32 size);
+extern void kernel_free(void *block, u32 size);
+#endif
+
+#ifdef BAD_RTOS_USE_MUTEX
+#define MUTEX_DECLARE(name)\
+bad_mutex_t name = {.blockedq = DLIST_INITIALISER(name.blockedq)}
+
+extern bad_rtos_status_t mutex_init(bad_mutex_t *mut);
+extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,u32 delay);
+extern bad_rtos_status_t mutex_put(bad_mutex_t *mut);
+extern bad_rtos_status_t mutex_delete(bad_mutex_t *mut);
+#endif
+
+#ifdef BAD_RTOS_USE_SEMAPHORE
+#define SEM_DECLARE(name,count)\
+bad_sem_t name = {.init_flag = 1, .counter = (count), .blockedq = DLIST_INITIALISER(name.blockedq)}
+
+extern bad_rtos_status_t sem_init(bad_sem_t *sem,u32 reset_value);
+extern bad_rtos_status_t sem_take(bad_sem_t *sem,u32 delay);
+extern bad_rtos_status_t sem_put(bad_sem_t *sem);
+extern bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem);
+extern bad_rtos_status_t sem_delete(bad_sem_t *sem);
+#endif
+
+#ifdef BAD_RTOS_USE_MSGQ
+#define MSGQ_DECLARE(name,size)\
+_Static_assert((size & (size - 1)) == 0, "queue size must be a power of 2"); \
+bad_msg_block_t name##_blocks [size];\
+bad_msgq_t name = {.capacity_mask = size - 1,.msgs = name##_blocks,.blockedq = DLIST_INITIALISER(name.blockedq)};
+
+#define MSGQ_DECLARE_STATIC(name,size)\
+_Static_assert((size & (size - 1)) == 0, "queue size must be a power of 2"); \
+static bad_msg_block_t name##_blocks [size];\
+static bad_msgq_t name = {.capacity_mask = size - 1,.msgs = name##_blocks,.blockedq = DLIST_INITIALISER(name.blockedq)};
+
+
+#ifdef BAD_RTOS_USE_KHEAP
+extern bad_rtos_status_t msgq_acquire_allocate(bad_msgq_t *q, u16 capacity);
+extern bad_rtos_status_t msgq_release_deallocate(bad_msgq_t *q);
+#endif
+
+extern bad_rtos_status_t msgq_acquire(bad_msgq_t *q);
+extern bad_rtos_status_t msgq_release(bad_msgq_t *q);
+extern bad_rtos_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback, u32 delay);
+extern bad_rtos_status_t msgq_post_msg(bad_msgq_t *q, u32 signal, void *args, u32 delay);
+extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args);
+#endif
+
+#ifdef BAD_RTOS_USE_EVENT_BARRIER
+#define EVENT_BARRIER_FLAGS_VALID_MASK (0x80000000UL)
+
+#define EVENT_BARRIER_GET_FLAGS(flags) ({\
+((flags) & EVENT_BARRIER_FLAGS_VALID_MASK) ? ((flags)^ EVENT_BARRIER_FLAGS_VALID_MASK ) : 0;\
+})
+
+#define EVENT_BARRIER_GET_ERROR(flags) ({\
+((flags) & EVENT_BARRIER_FLAGS_VALID_MASK) ? BAD_RTOS_STATUS_OK : (flags);\
+})
+
+extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count);
+extern u32 event_barrier_wait(bad_event_barrier_t *event_barrier, u32 delay);
+extern bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier, u32 flag);
+extern bad_rtos_status_t event_barrier_fire(bad_event_barrier_t *event_barrier, u32 flag);
+extern bad_rtos_status_t event_barrier_delete(bad_event_barrier_t *event_barrier);
+#endif
+
+// Helpers****************************************
 // Atomics
 static inline __attribute__((always_inline)) u32 __ldrex(volatile u32* addr)
 {
@@ -1600,6 +1729,32 @@ static inline bool dlist_is_empty(bad_link_node_t *list)
     return list == list->next;
 }
 
+static inline bad_link_node_t *dlist_pull_front(bad_link_node_t *list)
+{
+    bad_link_node_t *ret = 0;
+    
+    if(!dlist_is_empty(list))
+    {
+        ret = list->next;
+        dlist_remove(ret);
+    }
+    
+    return ret;
+}
+
+static inline bad_link_node_t *dlist_pull_back(bad_link_node_t *list)
+{
+    bad_link_node_t *ret = 0;
+    
+    if(!dlist_is_empty(list))
+    {
+        ret = list->prev;
+        dlist_remove(ret);
+    }
+    
+    return ret;
+}
+
 #define dlist_iter_cond(pos, list, cond) \
 for((pos) = (list)->next; \
 (pos) != (list) && (cond);\
@@ -1630,7 +1785,74 @@ dlist_iter_cond_cast(pos,list,member,1)
 #define dlist_iter_all_safe_cast(pos, s, list, member)\
 dlist_iter_cond_safe_cast(pos, s, list, member,1)
 
-//Helpers for bitmapped dlist (array of list heads + bmask to track occupancy)
+//Bitmaps
+static inline u32 bmap_toggle_bit(u32 *bmap, u32 pos)
+{
+    u32 word = pos / 32;
+    u32 bit = pos % 32;
+    bmap[word] ^= 1UL << bit;
+    
+    return (bmap[word] & 1UL << bit) != 0;
+}
+
+static inline void bmap_set_bit(u32 *bmap, u32 pos)
+{
+    u32 word = pos / 32;
+    u32 bit = pos % 32;
+    bmap[word] |= 1UL << bit;
+}
+
+static inline void bmap_clear_bit(u32 *bmap, u32 pos)
+{
+    u32 word = pos / 32;
+    u32 bit = pos % 32;
+    bmap[word] &= ~(1UL << bit);
+}
+
+static inline u32 bmap_test_bit(u32 *bmap, u32 pos)
+{
+    u32 word = pos / 32;
+    u32 bit = pos % 32;
+    
+    return (bmap[word] & 1UL << bit) != 0; 
+}
+
+static inline u32 bmap_ffs(u32 *bmap, u32 bmap_size, u32 pos)
+{
+    u32 ret = bmap_size;
+    if(pos < bmap_size)
+    {
+        u32 bmap_word_size = DIV_ROUND_UP(bmap_size,32);
+        
+        u32 word = pos / 32;
+        u32 bit = pos % 32;
+        
+        u32 mask = ~0UL << bit;
+        u32 first_word = bmap[word] & mask;
+        
+        if(first_word)
+        {
+            ret = __builtin_ctz(first_word);
+        }
+        else
+        {
+            for(u32 i = word + 1; i < bmap_word_size; i++)
+            {
+                if(bmap[i])
+                {
+                    u32 find = __builtin_ctz(bmap[i]);
+                    u32 res_pos = i * 32 + find;
+                    ret = res_pos >= bmap_size ? bmap_size : res_pos;
+                    break;
+                }
+            }
+        }
+    }
+    
+    return ret;
+}
+
+//Helpers for bitmapped dlist (array of list heads + bmap to track occupancy)
 //Currently used in buddy alloc and ready queue
 static inline void bmap_dlist_add_front(bad_link_node_t *list_arr,
                                         bad_link_node_t *node,
@@ -1638,7 +1860,7 @@ static inline void bmap_dlist_add_front(bad_link_node_t *list_arr,
                                         u32 pos)
 {
     dlist_add_front(list_arr + pos,node);
-    *bmap |= 1UL << pos;
+    bmap_set_bit(bmap,pos);
 }
 
 static inline void bmap_dlist_add_back(bad_link_node_t *list_arr,
@@ -1647,7 +1869,7 @@ static inline void bmap_dlist_add_back(bad_link_node_t *list_arr,
                                        u32 pos)
 {
     dlist_add_back(list_arr + pos,node);
-    *bmap |= 1UL << pos;
+    bmap_set_bit(bmap,pos);
 }
 
 static inline void bmap_dlist_remove(bad_link_node_t *list_arr,
@@ -1660,7 +1882,7 @@ static inline void bmap_dlist_remove(bad_link_node_t *list_arr,
     dlist_remove(node);
     
     if(dlist_is_empty(list))
-        *bmap &= ~(1 << pos);
+        bmap_clear_bit(bmap,pos);
 }
 
 static inline bad_link_node_t * bmap_dlist_pull_front(bad_link_node_t *list_arr,
@@ -1703,126 +1925,6 @@ extern const type __stop_##section_name
 
 #define BAD_ITER_SECTION_ITER_ALL(section_name,type,pos)\
 for((pos) = &__start_##section_name; (pos) < &__stop_##section_name; (pos)++)
-
-#define BAD_TASK_HANDLE_IS_VALID(handle) ({ handle.idx != 0xFFFF; })
-
-#define BAD_TASK_HANDLE_GET_ERROR(handle) ({\
-BAD_TASK_HANDLE_IS_VALID(handle) ? BAD_RTOS_STATUS_OK : handle.gen; \
-})
-
-//Main API
-extern void bad_rtos_start();
-
-extern bad_task_handle_t task_make(const bad_task_descr_t *descr);
-extern bad_rtos_status_t task_delay(u32 delay, cbptr cb, void *args );
-extern bad_rtos_status_t task_block();
-extern bad_rtos_status_t task_unblock(bad_task_handle_t task);
-extern bad_rtos_status_t task_unblock_from_isr(bad_task_handle_t task);
-extern bad_rtos_status_t task_yield();
-extern bad_rtos_status_t task_finish();
-extern bad_rtos_status_t task_delay_cancel(bad_task_handle_t task);
-extern bad_rtos_status_t task_delay_cancel_from_isr(bad_task_handle_t task);
-extern bad_rtos_status_t irq_acquire(s32 irqn);
-extern bad_rtos_status_t irq_enable(s32 irqn);
-extern bad_rtos_status_t irq_disable(s32 irqn);
-extern bad_rtos_status_t irq_pend(s32 irqn);
-extern bad_rtos_status_t irq_clear(s32 irqn);
-extern bad_rtos_status_t irq_set_prio(s32 irqn, u8 prio);
-extern bad_rtos_status_t irq_release(s32 irqn);
-extern void preempt_disable();
-extern void preempt_enable();
-
-#define POOL_DECLARE_TYPE(name,type,count) \
-_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
-u8 __attribute__((aligned(_Alignof(type)))) name##_mem[sizeof(type) * (count)];\
-bad_pool_t name = {.mem = name##_mem,.block_size = sizeof(type),.size_in_bytes = sizeof(type) * (count)};
-
-#define POOL_DECLARE_TYPE_STATIC(name,type,count) \
-_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
-static u8 __attribute__((aligned(_Alignof(type)))) name##_mem[sizeof(type) * (count)];\
-static bad_pool_t name = {.mem = name##_mem,.block_size = sizeof(type),.size_in_bytes = sizeof(type) * (count)};
-
-#define POOL_DECLARE(name,__mem,__block_size,__size_in_bytes)\
-_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
-bad_pool_t name = {.mem = (u8 *)__mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes};
-
-#define POOL_DECLARE_STATIC(name,__mem,__block_size,__size_in_bytes)\
-_Static_assert(sizeof(type) >= 4, "Pool elements should be at least 4 bytes");\
-static bad_pool_t name = {.mem = (u8 *)__mem,.block_size = __block_size,.size_in_bytes = __size_in_bytes};
-
-extern bad_rtos_status_t pool_init(bad_pool_t *pool, void *mem, u32 block_size, u32 size_in_bytes);
-extern void* pool_alloc(bad_pool_t *pool);
-extern void pool_free(bad_pool_t *pool, void *obj);
-extern void* gpool_alloc();
-extern void gpool_free(void *obj);
-
-#ifdef BAD_RTOS_USE_KHEAP
-extern void* kernel_alloc(u32 size);
-extern void kernel_free(void *block, u32 size);
-#endif
-
-#ifdef BAD_RTOS_USE_MUTEX
-#define MUTEX_DECLARE(name)\
-bad_mutex_t name = {.blockedq = DLIST_INITIALISER(name.blockedq)}
-
-extern bad_rtos_status_t mutex_init(bad_mutex_t *mut);
-extern bad_rtos_status_t mutex_take(bad_mutex_t *mut,u32 delay);
-extern bad_rtos_status_t mutex_put(bad_mutex_t *mut);
-extern bad_rtos_status_t mutex_delete(bad_mutex_t *mut);
-#endif
-
-#ifdef BAD_RTOS_USE_SEMAPHORE
-#define SEM_DECLARE(name,count)\
-bad_sem_t name = {.init_flag = 1, .counter = (count), .blockedq = DLIST_INITIALISER(name.blockedq)}
-
-extern bad_rtos_status_t sem_init(bad_sem_t *sem,u32 reset_value);
-extern bad_rtos_status_t sem_take(bad_sem_t *sem,u32 delay);
-extern bad_rtos_status_t sem_put(bad_sem_t *sem);
-extern bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem);
-extern bad_rtos_status_t sem_delete(bad_sem_t *sem);
-#endif
-
-#ifdef BAD_RTOS_USE_MSGQ
-#define MSGQ_DECLARE(name,size)\
-_Static_assert((size & (size - 1)) == 0, "queue size must be a power of 2"); \
-bad_msg_block_t name##_blocks [size];\
-bad_msgq_t name = {.capacity_mask = size - 1,.msgs = name##_blocks,.blockedq = DLIST_INITIALISER(name.blockedq)};
-
-#define MSGQ_DECLARE_STATIC(name,size)\
-_Static_assert((size & (size - 1)) == 0, "queue size must be a power of 2"); \
-static bad_msg_block_t name##_blocks [size];\
-static bad_msgq_t name = {.capacity_mask = size - 1,.msgs = name##_blocks,.blockedq = DLIST_INITIALISER(name.blockedq)};
-
-
-#ifdef BAD_RTOS_USE_KHEAP
-extern bad_rtos_status_t msgq_acquire_allocate(bad_msgq_t *q, u16 capacity);
-extern bad_rtos_status_t msgq_release_deallocate(bad_msgq_t *q);
-#endif
-
-extern bad_rtos_status_t msgq_acquire(bad_msgq_t *q);
-extern bad_rtos_status_t msgq_release(bad_msgq_t *q);
-extern bad_rtos_status_t msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback, u32 delay);
-extern bad_rtos_status_t msgq_post_msg(bad_msgq_t *q, u32 signal, void *args, u32 delay);
-extern bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args);
-#endif
-
-#ifdef BAD_RTOS_USE_EVENT_BARRIER
-#define EVENT_BARRIER_FLAGS_VALID_MASK (0x80000000UL)
-
-#define EVENT_BARRIER_GET_FLAGS(flags) ({\
-((flags) & EVENT_BARRIER_FLAGS_VALID_MASK) ? ((flags)^ EVENT_BARRIER_FLAGS_VALID_MASK ) : 0;\
-})
-
-#define EVENT_BARRIER_GET_ERROR(flags) ({\
-((flags) & EVENT_BARRIER_FLAGS_VALID_MASK) ? BAD_RTOS_STATUS_OK : (flags);\
-})
-
-extern bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count);
-extern u32 event_barrier_wait(bad_event_barrier_t *event_barrier, u32 delay);
-extern bad_rtos_status_t event_barrier_fire_from_isr(bad_event_barrier_t *event_barrier, u32 flag);
-extern bad_rtos_status_t event_barrier_fire(bad_event_barrier_t *event_barrier, u32 flag);
-extern bad_rtos_status_t event_barrier_delete(bad_event_barrier_t *event_barrier);
-#endif
 
 #ifdef BAD_RTOS_IMPLEMENTATION
 
@@ -1867,20 +1969,20 @@ typedef struct
     
     bad_link_node_t blockedq;
     
-    u32 ready_bmask;
+    u32 ready_bmap;
     bad_link_node_t readyq[BAD_RTOS_PRIO_COUNT];
     
     bad_isr_q_t isrq;
     
-    u32 irq_bmask[DIV_ROUND_UP(BAD_RTOS_IRQ_COUNT,32)];
+    u32 irq_bmap[DIV_ROUND_UP(BAD_RTOS_IRQ_COUNT,32)];
     
 } bad_kernel_cb_t;
 
-typedef struct bitmask_slab_cb
+typedef struct bitmap_slab_cb
 {
-    u32 free_bitmask;
+    u32 free_bitmap;
     bad_tcb_t node_arr[BAD_RTOS_MAX_TASKS];
-} tcb_bitmask_slab_t;
+} tcb_bitmap_slab_t;
 
 typedef enum 
 {
@@ -1894,13 +1996,13 @@ typedef enum
 typedef struct 
 {
     u8* heap;
-    u32 heads_bmask;
+    u32 heads_bmap;
     u32 max_order;
     u32 min_order;
     bad_link_node_t* free_list;
-    u32* bmask;
+    u32* bmap;
 } bad_buddy_t;
-#define BUDDY_BITMASK_SIZE(max_order,min_order)\
+#define BUDDY_BITMAP_SIZE(max_order,min_order)\
 DIV_ROUND_UP(1UL << (max_order - min_order),32) // bits required = (2 ^ max_order - min_order) - 1, to get the words divide by 32 and round up
 
 #ifndef KMIN_ORDER
@@ -1955,12 +2057,12 @@ _Static_assert( 1
 static u8 __attribute__((section(".kheap"))) kheap[KHEAP_SIZE];
 static bad_buddy_t __attribute__((section(".kernel_bss")))kernel_buddy;
 static bad_link_node_t __attribute__((section(".kernel_bss"))) kfreelist[KFREE_LIST_SIZE];
-static u32 __attribute__((section(".kernel_bss"))) kbitmask[BUDDY_BITMASK_SIZE(KMAX_ORDER, KMIN_ORDER)]; 
+static u32 __attribute__((section(".kernel_bss"))) kbitmap[BUDDY_BITMAP_SIZE(KMAX_ORDER, KMIN_ORDER)]; 
 #endif
 
 static bad_kernel_cb_t __attribute__((section(".kernel_bss"))) kernel_cb;
 
-static tcb_bitmask_slab_t __attribute__((section(".kernel_bss"))) tcbslab;
+static tcb_bitmap_slab_t __attribute__((section(".kernel_bss"))) tcbslab;
 
 static u8  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RTOS_GLOBAL_POOL_SIZE_IN_BYTES];
 static bad_pool_t gpool; //Not initialsed to prevent isrs from generating events before the kernel has started
@@ -2016,15 +2118,30 @@ extern u8 __dma_buffs;
 #endif
 // ///CODE_REPLACE_END
 
-static inline void __bmask_toggle_if_list_empty(u32 *bmask,bad_link_node_t *list, u32 pos)
+static inline void __arm_write_retval(bad_tcb_t *tcb, u32 val)
 {
-    *bmask ^= (u32)dlist_is_empty(list) << pos;
+    *(tcb->sp + 9) = val;
+}
+
+static inline u32 __arm_get_gpreg(bad_tcb_t *tcb,u32 reg_num)
+{
+    u32 ret = 0;
+    
+    if(reg_num > 12)
+        __builtin_trap();
+    
+    if(reg_num < 4)
+        ret = *(tcb->sp + 9 + reg_num);
+    else
+        ret = *(tcb->sp + reg_num - 4);
+    
+    return ret;
 }
 
 // Memory helpers
 #ifdef BAD_RTOS_USE_KHEAP
 
-static inline u32 __buddy_toggle_bmask(bad_buddy_t *cb, u8 *block, u32 order)
+static inline u32 __buddy_toggle_bmap(bad_buddy_t *cb, u8 *block, u32 order)
 {
     u32 idx = cb->max_order - order;
     
@@ -2032,13 +2149,11 @@ static inline u32 __buddy_toggle_bmask(bad_buddy_t *cb, u8 *block, u32 order)
     
     u32 level = (1 << (idx - 1)) - 1;
     u32 offset = offset_from_base >> (order + 1);
-    u32 bmaskidx = level + offset;
+    u32 bmapidx = level + offset;
     
-    u32 bmask_word = bmaskidx >> 5;
-    u32 bmask_bit = bmaskidx & 31;
-    cb->bmask[bmask_word] ^= 1 << bmask_bit;
+    u32 ret = bmap_toggle_bit(cb->bmap, bmapidx);
     
-    return (cb->bmask[bmask_word] & (1 << bmask_bit)) != 0;
+    return ret;
 }
 
 void  __buddy_init(bad_buddy_t *cb,
@@ -2046,13 +2161,13 @@ void  __buddy_init(bad_buddy_t *cb,
                    bad_link_node_t *freelist,
                    u32 min_order, 
                    u32 max_order, 
-                   u32 *bmask)
+                   u32 *bmap)
 {
     cb->min_order = min_order;
     cb->max_order = max_order;
     cb->heap = heap;
     cb->free_list = freelist;
-    cb->bmask = bmask;
+    cb->bmap = bmap;
     
     for (u32 i = 0; i < max_order - min_order + 1; i++)
     {
@@ -2060,7 +2175,7 @@ void  __buddy_init(bad_buddy_t *cb,
     }
     
     bad_link_node_t *embedded_node = (bad_link_node_t*)cb->heap;
-    bmap_dlist_add_front(freelist,embedded_node,&cb->heads_bmask,0);
+    bmap_dlist_add_front(freelist,embedded_node,&cb->heads_bmap,0);
 }
 
 static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
@@ -2073,18 +2188,18 @@ static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
     {
         u32 order_mask = (1 << (idx + 1)) - 1;
         
-        picked_idx = 31 - __builtin_clz(cb->heads_bmask & order_mask);
+        picked_idx = 31 - __builtin_clz(cb->heads_bmap & order_mask);
         
         if(picked_idx == UINT32_MAX)
             return 0;
     }
     
-    u8 *block_for_split = (u8 *)bmap_dlist_pull_front(cb->free_list,&cb->heads_bmask,picked_idx);
+    u8 *block_for_split = (u8 *)bmap_dlist_pull_front(cb->free_list,&cb->heads_bmap,picked_idx);
     
     u32 splited_block_size = 1UL << (cb->max_order - picked_idx - 1);
     
     if(picked_idx)
-        __buddy_toggle_bmask(cb,block_for_split,cb->max_order - picked_idx);
+        __buddy_toggle_bmap(cb,block_for_split,cb->max_order - picked_idx);
     
     for(; picked_idx < idx; picked_idx++)
     {
@@ -2092,10 +2207,10 @@ static void* __buddy_alloc(bad_buddy_t *cb,u32 order)
         
         bad_link_node_t *unused_block = (bad_link_node_t *)(block_for_split + splited_block_size);
         
-        bmap_dlist_add_front(cb->free_list,unused_block,&cb->heads_bmask, splited_idx);
+        bmap_dlist_add_front(cb->free_list,unused_block,&cb->heads_bmap, splited_idx);
         
         u32 split_order = cb->max_order - splited_idx;
-        __buddy_toggle_bmask(cb,(u8 *)unused_block,split_order);
+        __buddy_toggle_bmap(cb,(u8 *)unused_block,split_order);
         
         splited_block_size >>= 1UL;
     }
@@ -2114,7 +2229,7 @@ static void __buddy_free(bad_buddy_t *cb,void *block, u32 order)
     
     while((idx = cb->max_order - curr_order))
     {
-        if(__buddy_toggle_bmask(cb,curr_block,curr_order))
+        if(__buddy_toggle_bmap(cb,curr_block,curr_order))
             break;
         
         u32 offset_from_base = (u8 *)curr_block - cb->heap;
@@ -2125,7 +2240,7 @@ static void __buddy_free(bad_buddy_t *cb,void *block, u32 order)
         void *parent_addr = (void*)(cb->heap + parent_offset); 
         
         bad_link_node_t *buddy = (bad_link_node_t *)buddy_addr;
-        bmap_dlist_remove(cb->free_list,buddy,&cb->heads_bmask,idx);
+        bmap_dlist_remove(cb->free_list,buddy,&cb->heads_bmap,idx);
         
         curr_order++;
         curr_block = parent_addr;
@@ -2133,7 +2248,7 @@ static void __buddy_free(bad_buddy_t *cb,void *block, u32 order)
     
     bad_link_node_t *final_block = (bad_link_node_t*)curr_block;
     
-    bmap_dlist_add_front(cb->free_list,final_block,&cb->heads_bmask,idx);
+    bmap_dlist_add_front(cb->free_list,final_block,&cb->heads_bmap,idx);
 }
 
 BAD_RTOS_STATIC void* __kernel_alloc(u32 size)
@@ -2160,9 +2275,9 @@ BAD_RTOS_STATIC void __kernel_free(void *block,u32 size)
 BAD_RTOS_STATIC void __tcb_queue_slab_init()
 {
 #if BAD_RTOS_MAX_TASKS < 32
-    tcbslab.free_bitmask = (1UL << (BAD_RTOS_MAX_TASKS)) - 1;
+    tcbslab.free_bitmap = (1UL << (BAD_RTOS_MAX_TASKS)) - 1;
 #else
-    tcbslab.free_bitmask = UINT32_MAX;
+    tcbslab.free_bitmap = UINT32_MAX;
 #endif
 }
 
@@ -2170,10 +2285,10 @@ BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_alloc()
 {
     bad_tcb_t *ret = 0;
     
-    if(tcbslab.free_bitmask)
+    if(tcbslab.free_bitmap)
     {
-        u8 block_idx = __builtin_ctz(tcbslab.free_bitmask);
-        tcbslab.free_bitmask &= ~(1UL << block_idx);
+        u32 block_idx = bmap_ffs(&tcbslab.free_bitmap,BAD_RTOS_MAX_TASKS,0);
+        bmap_clear_bit(&tcbslab.free_bitmap,block_idx);
         
         ret = tcbslab.node_arr + block_idx;
     }
@@ -2181,9 +2296,9 @@ BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_alloc()
     return ret;
 }
 
-BAD_RTOS_STATIC u8 __tcb_slab_get_idx_from_ptr(bad_tcb_t *block)
+BAD_RTOS_STATIC u32 __tcb_slab_get_idx_from_ptr(bad_tcb_t *block)
 {
-    u8 ret = 0xFF;
+    u32 ret = BAD_RTOS_MAX_TASKS + 1;
     
     if(tcbslab.node_arr <= block &&
        tcbslab.node_arr + BAD_RTOS_MAX_TASKS > block)
@@ -2204,10 +2319,10 @@ BAD_RTOS_STATIC bad_tcb_t *__tcb_slab_get_ptr_from_idx(u8 idx)
 
 BAD_RTOS_STATIC void __tcb_slab_free(bad_tcb_t *tcb)
 {
-    u8 block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
+    u32 block_idx = __tcb_slab_get_idx_from_ptr(tcb); 
     
     if(block_idx < BAD_RTOS_MAX_TASKS)
-        tcbslab.free_bitmask |= (1ULL << block_idx);
+        bmap_set_bit(&tcbslab.free_bitmap,block_idx);
 }
 
 BAD_RTOS_STATIC void *__obj_list_pull_atomic(volatile void* list)
@@ -2258,13 +2373,13 @@ void* pool_alloc(bad_pool_t *pool)
     
     if(!res)
     {
-        u32 curr;
+        u32 curr = 0;
         do
         {
             curr = __ldrex(&pool->curr);
             
             if(curr >= pool->size_in_bytes)
-                return 0;
+                goto exit;
             
         }
         while(__strex(curr+pool->block_size,&pool->curr));
@@ -2272,6 +2387,7 @@ void* pool_alloc(bad_pool_t *pool)
         res = pool->mem + curr;
     }
     
+    exit:
     return res;
 }
 
@@ -2294,18 +2410,6 @@ void gpool_free(void *obj){
 }
 
 //Scheduling helpers
-BAD_RTOS_STATIC bad_rtos_status_t __remove_entry(bad_tcb_t *tcb,bad_rtos_misc_t target)
-{
-    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
-    
-    if(tcb->misc == target)
-        dlist_remove(&tcb->qnode);
-    else
-        ret = BAD_RTOS_STATUS_WRONG_Q;
-    
-    return ret;
-}
-
 BAD_RTOS_STATIC void __prio_list_enqueue(bad_link_node_t *q,bad_tcb_t *tcb, bad_rtos_misc_t target)
 {
     bad_tcb_t *traverse = 0;
@@ -2321,11 +2425,23 @@ BAD_RTOS_STATIC void __prio_list_enqueue(bad_link_node_t *q,bad_tcb_t *tcb, bad_
     tcb->misc = target;
 }
 
+BAD_RTOS_STATIC bad_tcb_t* __prio_list_dequeue_head(bad_link_node_t *q)
+{
+    bad_tcb_t *ret = 0;
+    
+    if(bad_link_node_t *head = dlist_pull_front(q))
+    {
+        ret = BAD_CONTAINER_OF(head,bad_tcb_t,qnode); 
+    }
+    
+    return ret;
+}
+
 BAD_RTOS_STATIC void __readyq_enqueue(bad_tcb_t *tcb)
 {
     bmap_dlist_add_back(kernel_cb.readyq,
                         &tcb->qnode,
-                        &kernel_cb.ready_bmask,
+                        &kernel_cb.ready_bmap,
                         tcb->raised_priority);
     
     tcb->misc = BAD_RTOS_MISC_READYQ_MEMBER;
@@ -2333,7 +2449,7 @@ BAD_RTOS_STATIC void __readyq_enqueue(bad_tcb_t *tcb)
 
 BAD_RTOS_STATIC u32 __get_top_ready_prio()
 {
-    return __builtin_ctz(kernel_cb.ready_bmask);
+    return bmap_ffs(&kernel_cb.ready_bmap,BAD_RTOS_MAX_TASKS,0);
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __readyq_dequeue(bad_tcb_t *tcb)
@@ -2343,7 +2459,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __readyq_dequeue(bad_tcb_t *tcb)
     if(tcb->misc == BAD_RTOS_MISC_READYQ_MEMBER)
         bmap_dlist_remove(kernel_cb.readyq,
                           &tcb->qnode,
-                          &kernel_cb.ready_bmask,
+                          &kernel_cb.ready_bmap,
                           tcb->raised_priority);
     else
         ret = BAD_RTOS_STATUS_WRONG_Q;
@@ -2355,7 +2471,7 @@ BAD_RTOS_STATIC bad_tcb_t *__readyq_dequeue_head()
 {
     u32 top = __get_top_ready_prio();
     bad_link_node_t *tcb_qnode_ptr = 
-        bmap_dlist_pull_front(kernel_cb.readyq,&kernel_cb.ready_bmask,top);
+        bmap_dlist_pull_front(kernel_cb.readyq,&kernel_cb.ready_bmap,top);
     
     return BAD_CONTAINER_OF(tcb_qnode_ptr, bad_tcb_t, qnode);
 }
@@ -2401,6 +2517,8 @@ BAD_RTOS_STATIC bad_rtos_status_t __delayq_dequeue(bad_tcb_t *tcb)
         dlist_remove(tcb_delaynode_ptr);
         
         tcb->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED;
+        tcb->cbptr = 0;
+        tcb->args = 0;
     }
     else
     {
@@ -2410,41 +2528,17 @@ BAD_RTOS_STATIC bad_rtos_status_t __delayq_dequeue(bad_tcb_t *tcb)
     return ret;
 }
 
-BAD_RTOS_STATIC bad_tcb_t* __prio_list_dequeue_head(bad_link_node_t *q)
-{
-    bad_tcb_t *ret = 0;
-    
-    if(!dlist_is_empty(q))
-    {
-        bad_link_node_t *head = q->next;
-        
-        dlist_remove(head);
-        ret = BAD_CONTAINER_OF(head,bad_tcb_t,qnode); 
-    }
-    
-    return ret;
-}
-
 BAD_RTOS_STATIC bad_tcb_t* __delayq_dequeue_head()
 {
     bad_tcb_t *ret = 0;
     
-    if(!dlist_is_empty(&kernel_cb.delayq))
+    if(bad_link_node_t *head = dlist_pull_front(&kernel_cb.delayq))
     {
-        bad_link_node_t *head = kernel_cb.delayq.next;
-        
-        dlist_remove(head);
         ret = BAD_CONTAINER_OF(head,bad_tcb_t,delaynode);
         ret->delayq_misc = BAD_RTOS_MISC_NOT_DELAYED; 
     }
     
     return ret;
-}
-
-BAD_RTOS_STATIC void __enqueue_head(bad_link_node_t *q, bad_tcb_t *tcb, bad_rtos_misc_t target)
-{
-    dlist_add_front(q,&tcb->qnode);
-    tcb->misc = target;
 }
 
 BAD_RTOS_STATIC void __isr_q_push(bad_isr_q_t *q,bad_isr_op_obj_t* msg)
@@ -2508,7 +2602,7 @@ BAD_RTOS_STATIC bad_isr_op_obj_t *__isr_q_pop(bad_isr_q_t *q)
 BAD_RTOS_STATIC bad_rtos_status_t __kernel_notify(bad_isr_op_t op,void *arg)
 {
     bad_isr_op_obj_t *message = gpool_alloc();
-    bad_rtos_status_t ret = BAD_RTOS_STATUS_ALLOC_FAIL;
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
     if(message)
     {
@@ -2518,8 +2612,10 @@ BAD_RTOS_STATIC bad_rtos_status_t __kernel_notify(bad_isr_op_t op,void *arg)
         
         __isr_q_push(&kernel_cb.isrq,message);
         __scb_trigger_pendsv();
-        
-        ret = BAD_RTOS_STATUS_OK;
+    }
+    else
+    {
+        ret = BAD_RTOS_STATUS_ALLOC_FAIL;
     }
     
     return ret;
@@ -2552,47 +2648,6 @@ BAD_RTOS_STATIC void __sched_try_preempt(bad_tcb_t *tcb)
     else
     {
         __readyq_enqueue(tcb);
-    }
-}
-
-static void __attribute__((used)) __handle_systick_event(bad_systick_status_t status)
-{
-    if(status > 1)
-    {
-        do
-        { 
-            bad_tcb_t *wake = __delayq_dequeue_head();
-            
-            if(wake->cbptr)
-            {
-                bad_task_handle_t wake_handle = {
-                    .idx = __tcb_slab_get_idx_from_ptr(wake),
-                    .gen = wake->generation
-                };
-                
-                wake->cbptr(wake_handle,wake->args);
-                wake->cbptr = 0;
-                wake->args = 0;
-            }
-            
-            wake->counter = wake->ticks_to_change;
-            __readyq_enqueue(wake);
-        }
-        while(kernel_cb.delayq.next && !BAD_CONTAINER_OF(kernel_cb.delayq.next, bad_tcb_t, delaynode)->counter);
-        
-    }
-    
-    if(status & BAD_SYSTICK_TIMEFRAME_PENDING)
-        kernel_cb.curr->counter = kernel_cb.curr->ticks_to_change;
-    
-    u32 top_ready_prio = __get_top_ready_prio(); 
-    
-    if(kernel_cb.ready_bmask && !preempt_count && 
-       top_ready_prio + (status == BAD_SYSTICK_DELAY_WAKE_PENDING)
-       <= kernel_cb.curr->raised_priority)
-    {
-        __readyq_enqueue(kernel_cb.curr);
-        __sched_update(__readyq_dequeue_head());
     }
 }
 
@@ -2740,7 +2795,6 @@ BAD_RTOS_STATIC bad_task_handle_t __task_make(const bad_task_descr_t *args)
         new_task->owned_irqs[i] = -1;
     }
     
-    
     if(kernel_cb.is_running)
     {
         __sched_try_preempt(new_task);
@@ -2776,7 +2830,8 @@ BAD_RTOS_STATIC bad_task_handle_t __task_make(const bad_task_descr_t *args)
 
 BAD_RTOS_STATIC void  __task_block()
 {
-    __enqueue_head(&kernel_cb.blockedq, kernel_cb.curr,BAD_RTOS_MISC_BLOCKEDQ_MEMBER);
+    kernel_cb.curr->misc = BAD_RTOS_MISC_BLOCKEDQ_MEMBER;
+    dlist_add_front(&kernel_cb.blockedq,&kernel_cb.curr->qnode);
     __sched_update(__readyq_dequeue_head());
 }
 
@@ -2787,12 +2842,15 @@ BAD_RTOS_STATIC bad_rtos_status_t __task_unblock(bad_task_handle_t handle)
     
     if(__TASK_HANDLE_IS_VALID(tcb,handle))
     {
-        ret = __remove_entry(tcb, BAD_RTOS_MISC_BLOCKEDQ_MEMBER);
-        
-        if(ret  == BAD_RTOS_STATUS_OK)
+        if(tcb->misc == BAD_RTOS_MISC_BLOCKEDQ_MEMBER)
+        {
+            dlist_remove(&tcb->qnode);
             __sched_try_preempt(tcb);
+        }
         else
+        {
             ret = BAD_RTOS_STATUS_NOT_BLOCKED;
+        }
     }
     else
     {
@@ -2813,9 +2871,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __task_delay_cancel(bad_task_handle_t handle)
         
         if(ret == BAD_RTOS_STATUS_OK)
         {
-            tcb->cbptr = 0;
-            tcb->args = 0;
-            *(tcb->sp + 9) = BAD_RTOS_STATUS_WOKEN;
+            __arm_write_retval(tcb,BAD_RTOS_STATUS_WOKEN);
             
             __sched_try_preempt(tcb);
         }
@@ -2868,10 +2924,7 @@ BAD_RTOS_STATIC void __task_finish()
         if(kernel_cb.curr->owned_irqs[i] != -1)
         {
             u32 pos = kernel_cb.curr->owned_irqs[i];
-            
-            u32 word_idx = pos / 32;
-            u32 bit_idx = pos % 32;
-            kernel_cb.irq_bmask[word_idx] &= ~(1U << bit_idx);
+            bmap_clear_bit(kernel_cb.irq_bmap,pos);
         }
     }
     
@@ -2909,6 +2962,7 @@ BAD_RTOS_STATIC void __kernel_start()
     __asm__ volatile("b __init_second_stage");
 }
 
+//IRQs
 BAD_RTOS_STATIC s32 __irq_find(s32 irqn)
 {
     u32 slot = 0;
@@ -2954,13 +3008,10 @@ BAD_RTOS_STATIC bad_rtos_status_t __irq_acquire(s32 irqn)
     }
     else
     {
-        u32 word_idx = pos / 32;
-        u32 bit_idx = pos % 32;
-        
-        if(kernel_cb.irq_bmask[word_idx] & (1U << bit_idx))
+        if(bmap_test_bit(kernel_cb.irq_bmap,pos))
             ret = BAD_RTOS_STATUS_ALLOC_FAIL;
         else
-            kernel_cb.irq_bmask[word_idx] |= (1U << bit_idx);
+            bmap_set_bit(kernel_cb.irq_bmap,pos);
     }
     
     if(ret == BAD_RTOS_STATUS_OK)
@@ -3137,9 +3188,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __irq_release(s32 irqn)
         {
             u32 pos = kernel_cb.curr->owned_irqs[slot];
             
-            u32 word_idx = pos / 32;
-            u32 bit_idx = pos % 32;
-            kernel_cb.irq_bmask[word_idx] &= ~(1U << bit_idx);
+            bmap_clear_bit(kernel_cb.irq_bmap,pos);
             
             kernel_cb.curr->owned_irqs[slot] = -1;
             kernel_cb.curr->irqs_allocated--;
@@ -3242,7 +3291,7 @@ void bad_rtos_start()
     __interrupt_init();
     __idle_task_init();
 #ifdef BAD_RTOS_USE_KHEAP
-    __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER, kbitmask);
+    __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER, kbitmap);
 #endif
 #ifdef BAD_RTOS_USE_MPU
     __mpu_default_init();
@@ -3269,13 +3318,9 @@ BAD_RTOS_STATIC bad_tcb_t* __synchro_wake(bad_link_node_t *q,cbptr cb,bad_rtos_s
     if(tcb)
     {
         if(tcb->cbptr == cb)
-        {
             __delayq_dequeue(tcb);
-            tcb->cbptr = 0;
-            tcb->args = 0;
-        }
         
-        *(tcb->sp+9) = status;
+        __arm_write_retval(tcb,status);
         
         __sched_try_preempt(tcb);
     }
@@ -3290,14 +3335,10 @@ BAD_RTOS_STATIC void __synchro_wake_all(bad_link_node_t *q,cbptr cb, u32 status)
     
     dlist_iter_all_safe_cast(traverse,safe,q,qnode)
     {
-        *(traverse->sp+9) = status;
+        __arm_write_retval(traverse,status);
         
         if(traverse->cbptr == cb)
-        {
-            traverse->cbptr = 0;
-            traverse->args = 0;
             __delayq_dequeue(traverse);
-        }
         
         dlist_remove(&traverse->qnode);
         
@@ -3340,8 +3381,10 @@ BAD_RTOS_STATIC void __msgq_timeout_cb(bad_task_handle_t handle ,void *msgq)
 {
     (void)msgq;
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
-    __remove_entry(tcb,BAD_RTOS_MISC_MSGQ_BLOCKEDQ_MEMBER);
-    *(tcb->sp + 9) = BAD_RTOS_STATUS_TIMEOUT;
+    
+    dlist_remove(&tcb->qnode);
+    
+    __arm_write_retval(tcb,BAD_RTOS_STATUS_TIMEOUT);
 }
 
 #ifdef BAD_RTOS_USE_KHEAP
@@ -3443,8 +3486,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __msgq_release(bad_msgq_t *q)
         q->owner = 0;
         kernel_cb.curr->msgq_owner--;
         
-        volatile u32 *atomic_update = (volatile u32 *)&q->head; 
-        *atomic_update = 0;
+        q->atomic_update = 0;
         
         __synchro_wake_all(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_DELETED);
     }
@@ -3483,16 +3525,15 @@ bad_rtos_status_t __msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback,u32 
             u16 next_tail = (q->tail + 1) & q->capacity_mask;
             u16 next_head = (q->head + 1) & q->capacity_mask;
             
-            u32 signal = *(tcb->sp + 10);
-            void *args = (void *) *(tcb->sp + 11);
+            u32 signal = __arm_get_gpreg(tcb,1);
+            void *args = (void *) __arm_get_gpreg(tcb,2);
             
             bad_msg_block_t *block = q->msgs + q->head;
             block->signal = signal;
             block->args = args;
             BAD_OPT_BARRIER;
             
-            volatile u32 *atomic_update = (volatile u32 *)&q->head;
-            *atomic_update = next_head | (next_tail << 16);
+            q->atomic_update = next_head | (next_tail << 16);
         }
         else
         {
@@ -3509,10 +3550,10 @@ BAD_RTOS_STATIC void __msgq_try_wake(bad_msgq_t *q)
     
     if(tcb)
     {
-        bad_msg_block_t *writeback = (bad_msg_block_t *) *(tcb->sp + 10);
+        bad_msg_block_t *writeback = (bad_msg_block_t *) __arm_get_gpreg(tcb,1);
         *writeback = *(q->msgs+q->tail);
-        
         BAD_OPT_BARRIER;
+        
         q->tail = (q->tail + 1) & q->capacity_mask;
     }
 }
@@ -3637,8 +3678,10 @@ BAD_RTOS_STATIC void __mutex_timeout_cb(bad_task_handle_t handle, void *mutex)
 {
     (void)mutex;
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
-    __remove_entry(tcb,BAD_RTOS_MISC_MUTEX_BLOCKEDQ_MEMBER);
-    *(tcb->sp + 9) = BAD_RTOS_STATUS_TIMEOUT;
+    
+    dlist_remove(&tcb->qnode);
+    
+    __arm_write_retval(tcb,BAD_RTOS_STATUS_TIMEOUT);
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __mutex_delete(bad_mutex_t *mut)
@@ -3753,13 +3796,9 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut)
                 tcb->mutex_count++;
                 
                 if(tcb->cbptr == __mutex_timeout_cb)
-                {
                     __delayq_dequeue(mut->owner);
-                    tcb->cbptr = 0;
-                    tcb->args = 0;
-                }
                 
-                *(tcb->sp + 9) = BAD_RTOS_STATUS_OK;
+                __arm_write_retval(tcb,BAD_RTOS_STATUS_OK);
                 
                 __readyq_enqueue(mut->owner);
             }
@@ -3796,8 +3835,10 @@ BAD_RTOS_STATIC void __sem_timeout_cb(bad_task_handle_t handle ,void *semaphore)
 {
     (void)semaphore;
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
-    __remove_entry(tcb,BAD_RTOS_MISC_SEM_BLOCKEDQ_MEMBER);
-    *(tcb->sp+9)=BAD_RTOS_STATUS_TIMEOUT;
+    
+    dlist_remove(&tcb->qnode);
+    
+    __arm_write_retval(tcb,BAD_RTOS_STATUS_TIMEOUT);
 }
 
 BAD_RTOS_STATIC bad_rtos_status_t __sem_delete(bad_sem_t *sem)
@@ -3983,9 +4024,9 @@ static void __event_barrier_timeout_cb(bad_task_handle_t handle ,void *event_bar
     
     bad_tcb_t *tcb = __tcb_slab_get_ptr_from_idx(handle.idx);
     
-    __remove_entry(tcb,BAD_RTOS_MISC_EVENT_BARRIER_BLOCKEDQ_MEMBER);
+    dlist_remove(&tcb->qnode);
     
-    *(tcb->sp + 9) = BAD_RTOS_STATUS_TIMEOUT;
+    __arm_write_retval(tcb,BAD_RTOS_STATUS_TIMEOUT);
 }
 
 bad_rtos_status_t event_barrier_prime(bad_event_barrier_t *event_barrier, u32 count)
@@ -4422,8 +4463,47 @@ static void __attribute__((used)) __pendsv_c()
     }
 }
 
-// ASM stuff
+static void __attribute__((used)) __handle_systick_event(bad_systick_status_t status)
+{
+    if(status > 1)
+    {
+        do
+        { 
+            bad_tcb_t *wake = __delayq_dequeue_head();
+            
+            if(wake->cbptr)
+            {
+                bad_task_handle_t wake_handle = {
+                    .idx = __tcb_slab_get_idx_from_ptr(wake),
+                    .gen = wake->generation
+                };
+                
+                wake->cbptr(wake_handle,wake->args);
+                wake->cbptr = 0;
+                wake->args = 0;
+            }
+            
+            wake->counter = wake->ticks_to_change;
+            __readyq_enqueue(wake);
+        }
+        while(!dlist_is_empty(&kernel_cb.delayq) && !BAD_CONTAINER_OF(kernel_cb.delayq.next, bad_tcb_t, delaynode)->counter);
+    }
+    
+    if(status & BAD_SYSTICK_TIMEFRAME_PENDING)
+        kernel_cb.curr->counter = kernel_cb.curr->ticks_to_change;
+    
+    u32 top_ready_prio = __get_top_ready_prio(); 
+    
+    if(kernel_cb.ready_bmap && !preempt_count && 
+       top_ready_prio + (status == BAD_SYSTICK_DELAY_WAKE_PENDING)
+       <= kernel_cb.curr->raised_priority)
+    {
+        __readyq_enqueue(kernel_cb.curr);
+        __sched_update(__readyq_dequeue_head());
+    }
+}
 
+// ASM stuff
 void __attribute__((naked)) BAD_RTOS_SVC_HANDLER_NAME()
 {
     __asm__ volatile(

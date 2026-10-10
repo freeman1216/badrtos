@@ -3412,7 +3412,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __irq_clear(s32 irqn)
 BAD_RTOS_STATIC bad_rtos_status_t __irq_set_prio(s32 irqn, u8 prio)
 {
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
-    s32 real_irqn = irqn + 16;
+    s32 real_irqn = irqn + 12;
     
     if(!__irq_check(real_irqn))
     {
@@ -3443,7 +3443,7 @@ BAD_RTOS_STATIC bad_rtos_status_t __irq_set_prio(s32 irqn, u8 prio)
 BAD_RTOS_STATIC bad_rtos_status_t __irq_release(s32 irqn)
 {
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
-    s32 real_irqn = irqn + 16;
+    s32 real_irqn = irqn + 12;
     
     if(real_irqn == -1)
     {
@@ -3796,6 +3796,7 @@ bad_rtos_status_t __msgq_pull_msg(bad_msgq_t *q, bad_msg_block_t *writeback,u32 
     {
         *writeback = *(q->msgs + q->tail);
         BAD_OPT_BARRIER;
+        
         bad_tcb_t *tcb = __synchro_wake(&q->blockedq,__msgq_timeout_cb,BAD_RTOS_STATUS_OK);
         
         if(tcb)
@@ -3938,6 +3939,7 @@ bad_rtos_status_t msgq_post_msg_from_isr(bad_msgq_t *q, u32 signal, void *args)
 #endif
 
 #ifdef BAD_RTOS_USE_MUTEX
+
 bad_rtos_status_t mutex_init(bad_mutex_t *mut)
 {
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
@@ -4204,9 +4206,11 @@ BAD_RTOS_STATIC bad_rtos_status_t __mutex_put(bad_mutex_t *mut)
     
     return ret;
 }
+
 #endif
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
+
 bad_rtos_status_t sem_init(bad_sem_t *sem, u32 reset_value)
 {
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
@@ -4389,7 +4393,7 @@ bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem)
     }
     else
     {
-        u32 counter;
+        u32 counter = 0;
         
         do
         {
@@ -4409,9 +4413,11 @@ bad_rtos_status_t sem_put_from_isr(bad_sem_t *sem)
     exit:
     return ret;
 }
+
 #endif
 
 #ifdef BAD_RTOS_USE_EVENT_BARRIER
+
 static void __event_barrier_timeout_cb(bad_task_handle_t handle ,void *event_barrier)
 {
     (void)event_barrier;

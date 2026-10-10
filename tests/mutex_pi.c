@@ -7,7 +7,7 @@
 #define TASK2_PRIORITY 1
 #define TASK3_PRIORITY 1
 
-static MUTEX_DECLARE(mut);
+static MUTEX_DEFINE(mut);
 
 volatile u32 preempted;
 
@@ -57,29 +57,9 @@ static void task3(void *unused)
     task_finish();
 }
 
-static const bad_task_descr_t task1_descr = {
-    .stack = task1_stack,
-    .stack_size = TASK1_STACK_SIZE,
-    .entry = task1,
-    .ticks_to_change = 50,
-    .base_priority = TASK1_PRIORITY
-};
-
-static const bad_task_descr_t task2_descr = {
-    .stack = task2_stack,
-    .stack_size = TASK2_STACK_SIZE,
-    .entry = task2,
-    .ticks_to_change = 50,
-    .base_priority = TASK2_PRIORITY
-};
-
-static const bad_task_descr_t task3_descr = {
-    .stack = task3_stack,
-    .stack_size = TASK3_STACK_SIZE,
-    .entry = task3,
-    .ticks_to_change = 50,
-    .base_priority = TASK3_PRIORITY
-};
+TASK_DESCR(task1_descr,1,task1,TASK1_PRIORITY);
+TASK_DESCR(task2_descr,2,task2,TASK2_PRIORITY);
+TASK_DESCR(task3_descr,3,task3,TASK3_PRIORITY);
 
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,mutex_pi) = {
     .task1_descr = &task1_descr,

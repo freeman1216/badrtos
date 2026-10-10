@@ -24,23 +24,14 @@ SECTIONS
    
     } > RAM
 
-    __rkernel_data = LOADADDR(.kernel_data);
-
-	.kernel_data : ALIGN(4) 
-	{
-		__kernel_data = .;
-		*(.kernel_data)
-		__ekernel_data = .;
-	} > RAM AT > ROM
-
-	.static_stacks : ALIGN(4096)
+	.static_stacks (NOLOAD) : ALIGN(4096)
 	{
 		__static_stacks = .;
         *(.static_stacks)
         __estatic_stacks = .;
-	}
+	} > RAM
 
-    .heap : ALIGN(32)
+    .heap (NOLOAD) : ALIGN(32)
     {
         __heap = .;
         *(.kheap)

@@ -18,7 +18,7 @@ typedef struct
     u32 data[2];
 } compile_check1_t;
 
-POOL_DECLARE_TYPE_STATIC(comp_check,compile_check1_t,1);
+POOL_DEFINE_TYPE_STATIC(comp_check,compile_check1_t,1);
 
 static void task1(void *unused)
 {
@@ -81,21 +81,8 @@ static void task2(void *unused)
     task_finish();
 }
 
-static const bad_task_descr_t task1_descr = {
-    .stack = task1_stack,
-    .stack_size = TASK1_STACK_SIZE,
-    .entry = task1,
-    .ticks_to_change = 50,
-    .base_priority = TASK1_PRIORITY
-};
-
-static const bad_task_descr_t task2_descr = {
-    .stack = task2_stack,
-    .stack_size = TASK2_STACK_SIZE,
-    .entry = task2,
-    .ticks_to_change = 50,
-    .base_priority = TASK2_PRIORITY
-};
+TASK_DESCR(task1_descr,1,task1,TASK1_PRIORITY);
+TASK_DESCR(task2_descr,2,task2,TASK2_PRIORITY);
 
 BAD_ITER_SECTION_MEMBER(tests, bad_test_case_t, pool_api_test) = {
     .task1_descr = &task1_descr,

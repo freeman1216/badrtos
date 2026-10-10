@@ -2,6 +2,8 @@
 #include "platform_setup.h"
 #include "runner.h"
 
+#ifdef BAD_RTOS_USE_MPU
+
 #define TASK1_PRIORITY 1 
 
 extern u8 __kernel_bss;
@@ -68,3 +70,5 @@ BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,mpu_test) = {
     .num_testcases = 3,
     .test_name = "MPU"
 };
+
+#endif

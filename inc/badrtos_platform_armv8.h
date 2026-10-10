@@ -11,44 +11,37 @@
 *  - Call bad_rtos_start to start rtos operation
 * Notes:
 *  - Depends on the linker file , to port just edit the linker file adding nessesary sections at the beginning of ram :
-*     .kernel_bss (NOLOAD) : ALIGN(32)
-*    {
-*         __kernel_bss = .;
-*         *(.kernel_bss)
-*         __ekernel_bss = .;
+*   .kernel_bss (NOLOAD) : ALIGN(32)
+*   {
+*       __kernel_bss = .;
+*       *(.kernel_bss)
+*       __ekernel_bss = .;
 *    
-*     } > RAM
+*   } > RAM
 *
-*     __rkernel_data = LOADADDR(.kernel_data);
+*    __rkernel_data = LOADADDR(.kernel_data);
 *
-*    .kernel_data : ALIGN(4) 
+*   .static_stacks : ALIGN(4096)
 *   {
-*     __kernel_data = .;
-*         *(.kernel_data)
-*     __ekernel_data = .;
-*   } > RAM AT > ROM
-*
-*    .static_stacks : ALIGN(4096)
-*   {
-*     __static_stacks = .;
-*         *(.static_stacks)
-*         __estatic_stacks = .;
+*       __static_stacks = .;
+*       *(.static_stacks)
+*       __estatic_stacks = .;
 *   }
-*     .heap : ALIGN(32)
-*     {
-*         __heap = .;
-*         *(.kheap)
-*     } > RAM
+*   .heap : ALIGN(32)
+*   {
+*       __heap = .;
+*       *(.kheap)
+*   } > RAM
 *
 * And in the end of ram :
 *
 *   .dma_buffs (NOLOAD) :ALIGN(32)
 *   {
-*         __dma_buffs = .; 
-*         *(.dma_buffs)
-*         . = ALIGN(32);
-*         __edma_buffs = .;
-*     } > RAM
+*       __dma_buffs = .; 
+*       *(.dma_buffs)
+*       . = ALIGN(32);
+*       __edma_buffs = .;
+*   } > RAM
 *
 *  - ! Kernel syscall interrupt priority is 0 on startup ,
 *      after startup it drops to lowest alowing isrs to run freely, 
@@ -60,8 +53,8 @@
 */
 /* date = September 18th 2026 11:44 pm */
 
-#ifndef BAD_RTOS_PLATFORM_CM33_H
-#define BAD_RTOS_PLATFORM_CM33_H
+#ifndef BAD_RTOS_PLATFORM_ARMV8_H
+#define BAD_RTOS_PLATFORM_ARMV8_H
 
 #ifndef BAD_RTOS_H
 # error "Platform should not be included independently"
@@ -187,25 +180,19 @@ static inline void __scb_disable_fault(bad_scb_core_interrupt_t intr)
 
 static inline void __scb_pend_fault(bad_scb_core_interrupt_t intr)
 {
-    u32 bit = intr;
-    
-    if(intr == BAD_SCB_USAGE_FAULT_INTR)
-        bit++;
+    static const u8 pend_bit[3] = {13, 14, 12};
     
     BAD_OPT_BARRIER;
-    BAD_SCB->SHCSR |= 1U << bit;
+    BAD_SCB->SHCSR |= 1U << pend_bit[intr];
     __dsb();
 }
 
 static inline void __scb_clear_fault(bad_scb_core_interrupt_t intr)
 {
-    u32 bit = intr;
-    
-    if(intr == BAD_SCB_USAGE_FAULT_INTR)
-        bit++;
+    static const u8 pend_bit[3] = {13, 14, 12};  
     
     BAD_OPT_BARRIER;
-    BAD_SCB->SHCSR &= ~(1U << bit);
+    BAD_SCB->SHCSR &= ~(1U << pend_bit[intr]);
     __dsb();
 }
 
@@ -446,8 +433,8 @@ static inline void __mpu_default_init()
     
     //global data
     BAD_MPU->RNR = 5;
-    BAD_MPU->RBAR = (u32)(&__heap) | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
-    BAD_MPU->RLAR = ((u32)(&__dma_buffs) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NON_CACHEABLE);
+    BAD_MPU->RBAR = (u32)(__heap) | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
+    BAD_MPU->RLAR = ((u32)(__dma_buffs) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NON_CACHEABLE);
     
     //flash region
     BAD_MPU->RNR = 6;
@@ -456,8 +443,8 @@ static inline void __mpu_default_init()
     
     //kernel data 
     BAD_MPU->RNR = 7;
-    BAD_MPU->RBAR = (u32)(&__kernel_bss) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
-    BAD_MPU->RLAR = ((u32)(&__ekernel_data) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
+    BAD_MPU->RBAR = (u32)(__kernel_bss) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
+    BAD_MPU->RLAR = ((u32)(__ekernel_bss) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
     
     __mpu_enable_with_default_map();
 }
@@ -468,7 +455,9 @@ static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const b
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
     //Stack region
+#ifdef BAD_RTOS_USE_KHEAP
     if(!tcb->dyn_stack)
+#endif
     {
         u32 addr_cast = (u32)tcb->stack;
         bad_mpu_region_t *stack_region = &tcb->regions[0];
@@ -565,7 +554,8 @@ static inline void __mpu_kernel_region_restore_lock(u32 key)
     BAD_MPU->RLAR = key;
     __dsb();
 }
+
 #endif
 // ///CODE_COPY_END
 
-#endif //BADRTOS_PLATFORM_CM33_H
+#endif //BADRTOS_PLATFORM_ARMV8_H

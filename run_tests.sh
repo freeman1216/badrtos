@@ -6,7 +6,7 @@ src=""
 run_debug=""
 added_opts=""
 optimisation=""
-opts="-ggdb -mfloat-abi=hard -Wall -Wextra -fjump-tables -nolibc --specs=nosys.specs -nostartfiles -I$code/inc/ -I$code/tests/test_platforms/"
+opts="-ggdb -mfloat-abi=hard -Wall -Wextra -fjump-tables -nolibc -fno-strict-aliasing --specs=nosys.specs -nostartfiles -I$code/inc/ -I$code/tests/test_platforms/"
 matched_dir=""
 platform=""
 

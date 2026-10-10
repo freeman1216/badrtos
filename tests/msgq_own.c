@@ -6,8 +6,8 @@
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 2
 
-MSGQ_DECLARE_STATIC(q0,16);
-MSGQ_DECLARE_STATIC(q1,16);
+MSGQ_DEFINE_STATIC(q0,16);
+MSGQ_DEFINE_STATIC(q1,16);
 
 static void msgq_test_ownership(u32 seq)
 {
@@ -45,6 +45,7 @@ static void msgq_test_ownership(u32 seq)
     
     if(!seq)
     {
+#ifdef BAD_RTOS_USE_KHEAP
         ret = msgq_acquire_allocate(&dynamic,16);
         BAD_ASSERT(ret == BAD_RTOS_STATUS_OK, "Acquire allocate failed");
         
@@ -53,6 +54,7 @@ static void msgq_test_ownership(u32 seq)
         
         ret = msgq_release_deallocate(&dynamic);
         BAD_ASSERT(ret == BAD_RTOS_STATUS_OK, "Release deallocate failed");
+#endif
     }
     
     task_finish();
@@ -76,26 +78,17 @@ static void task2(void *unused)
     msgq_test_ownership(1);
 }
 
-static const bad_task_descr_t task1_descr = {
-    .stack = task1_stack,
-    .stack_size = TASK1_STACK_SIZE,
-    .entry = task1,
-    .ticks_to_change = 50,
-    .base_priority = TASK1_PRIORITY
-};
-
-static const bad_task_descr_t task2_descr = {
-    .stack = task2_stack,
-    .stack_size = TASK2_STACK_SIZE,
-    .entry = task2,
-    .ticks_to_change = 50,
-    .base_priority = TASK2_PRIORITY
-};
+TASK_DESCR(task1_descr,1,task1,TASK1_PRIORITY);
+TASK_DESCR(task2_descr,2,task2,TASK2_PRIORITY);
 
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,msgq_own) = {
     .task1_descr = &task1_descr,
     .task2_descr = &task2_descr,
+#ifdef BAD_RTOS_USE_KHEAP
     .num_testcases = 14,
+#else
+    .num_testcases = 11,
+#endif
     .test_name = "MSGQ ownership"
 };
 

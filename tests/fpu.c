@@ -14,18 +14,23 @@ static void task1(void *unused)
     float fmul = 1.5f;
     float res = 0.0f;
     
+    u32 ret = BAD_RTOS_STATUS_OK;
+    
     __asm__ volatile(
-                     "vldr.32 s16, %1 \n"
-                     "vldr.32 s17, %2 \n"
+                     "vldr.32 s16, %2 \n"
+                     "vldr.32 s17, %3 \n"
                      "vmul.f32 s18, s16, s17 \n"
-                     "bl task_yield \n"
+                     "mov r0,#0xFFFF  \n"
+                     "bl task_yield   \n"
+                     "mov %1, r0      \n"
                      "vstr.32 s18, %0 \n"
-                     : "=m" (res)
+                     : "=m" (res), "=r"(ret)
                      : "m" (f), "m" (fmul)
-                     : "s16", "s17", "s18", "lr", "memory"
+                     : "r0","s16", "s17", "s18", "lr", "memory"
                      );
     
     BAD_ASSERT(res == 3.0f, "FPU calculation mismatch in task1");
+    BAD_ASSERT(ret == BAD_RTOS_STATUS_OK, "Wrong ret value");
     
     task_finish();
 }
@@ -38,37 +43,29 @@ static void task2(void *unused)
     float fmul = 1.5f;
     float res = 0.0f;
     
+    u32 ret = BAD_RTOS_STATUS_OK;
+    
     __asm__ volatile(
-                     "vldr.32 s16, %1 \n"
-                     "vldr.32 s17, %2 \n"
+                     "vldr.32 s16, %2 \n"
+                     "vldr.32 s17, %3 \n"
                      "vmul.f32 s18, s16, s17 \n"
-                     "bl task_yield \n"
+                     "mov r0,#0xFFFF  \n"
+                     "bl task_yield   \n"
+                     "mov %1, r0      \n"
                      "vstr.32 s18, %0 \n"
-                     : "=m" (res)
+                     : "=m" (res), "=r"(ret)
                      : "m" (f), "m" (fmul)
-                     : "s16", "s17", "s18", "lr", "memory"
+                     : "r0","s16", "s17", "s18", "lr", "memory"
                      );
     
     BAD_ASSERT(res == 6.0f, "FPU calculation mismatch in task2");
+    BAD_ASSERT(ret == BAD_RTOS_STATUS_OK, "Wrong ret value");
     
     task_finish();
 }
 
-static const bad_task_descr_t task1_descr = {
-    .stack = task1_stack,
-    .stack_size = TASK1_STACK_SIZE,
-    .entry = task1,
-    .ticks_to_change = 500,
-    .base_priority = TASK1_PRIORITY
-};
-
-static const bad_task_descr_t task2_descr = {
-    .stack = task2_stack,
-    .stack_size = TASK2_STACK_SIZE,
-    .entry = task2,
-    .ticks_to_change = 500,
-    .base_priority = TASK2_PRIORITY
-};
+TASK_DESCR(task1_descr,1,task1,TASK1_PRIORITY);
+TASK_DESCR(task2_descr,2,task2,TASK2_PRIORITY);
 
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,fpu) = {
     .task1_descr = &task1_descr,

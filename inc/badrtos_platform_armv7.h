@@ -12,34 +12,26 @@
 *  - Call bad_rtos_start to start rtos operation
 * Notes:
 *  - Depends on the linker file , to port just edit the linker file adding nessesary sections at the beginning of ram :
-*     .kernel_bss (NOLOAD) : ALIGN(32)
-*    {
-*         __kernel_bss = .;
-*         *(.kernel_bss)
-*         __ekernel_bss = .;
-*    
-*     } > RAM
-*
-*     __rkernel_data = LOADADDR(.kernel_data);
-*
-*    .kernel_data : ALIGN(4) 
+*   .kernel_bss (NOLOAD) : ALIGN(32)
 *   {
-*     __kernel_data = .;
-*         *(.kernel_data)
-*     __ekernel_data = .;
-*   } > RAM AT > ROM
+*       __kernel_bss = .;
+*       *(.kernel_bss)
+*       __ekernel_bss = .;
+*   } > RAM
 *
-*    .static_stacks : ALIGN(4096)
+*   __rkernel_data = LOADADDR(.kernel_data);
+*
+*   .static_stacks : ALIGN(4096)
 *   {
-*     __static_stacks = .;
-*         *(.static_stacks)
-*         __estatic_stacks = .;
+*       __static_stacks = .;
+*       *(.static_stacks)
+*       __estatic_stacks = .;
 *   }
-*     .heap : ALIGN(32)
-*     {
-*         __heap = .;
-*         *(.kheap)
-*     } > RAM
+*   .heap : ALIGN(32)
+*   {
+*     __heap = .;
+*     *(.kheap)
+*   } > RAM
 *
 *  - ! Kernel syscall interrupt priority is 0 on startup ,
 *      after startup it drops to lowest alowing isrs to run freely, 
@@ -153,28 +145,21 @@ static inline void __scb_disable_fault(bad_scb_core_interrupt_t intr)
 
 static inline void __scb_pend_fault(bad_scb_core_interrupt_t intr)
 {
-    u32 bit = intr;
-    
-    if(intr == BAD_SCB_USAGE_FAULT_INTR)
-        bit++;
+    static const u8 pend_bit[3] = {13, 14, 12};
     
     BAD_OPT_BARRIER;
-    BAD_SCB->SHCSR |= 1U << bit;
+    BAD_SCB->SHCSR |= 1U << pend_bit[intr];
     __dsb();
 }
 
 static inline void __scb_clear_fault(bad_scb_core_interrupt_t intr)
 {
-    u32 bit = intr;
-    
-    if(intr == BAD_SCB_USAGE_FAULT_INTR)
-        bit++;
+    static const u8 pend_bit[3] = {13, 14, 12};  
     
     BAD_OPT_BARRIER;
-    BAD_SCB->SHCSR &= ~(1U << bit);
+    BAD_SCB->SHCSR &= ~(1U << pend_bit[intr]);
     __dsb();
 }
-
 
 typedef struct
 {
@@ -364,6 +349,7 @@ static inline void __mpu_default_init()
         BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB |
         BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
         BAD_MPU_RASR_AP_PRIV_RO_UNPRIV_RO;
+    
     //null adress
     BAD_MPU->RNR = 6;
     BAD_MPU->RBAR = BAD_RTOS_FLASH_RO_ADDR;
@@ -371,15 +357,16 @@ static inline void __mpu_default_init()
         BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB |
         BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
         BAD_MPU_RASR_AP_PRIV_FAULT_UNPRIV_FAULT;
-    //kernel data structures
     
+    //kernel data structures
     BAD_MPU->RNR = 7;
     BAD_MPU->RBAR = BAD_RTOS_RAM_ADDR;
-    BAD_MPU->RASR = __mpu_find_size(&__static_stacks - &__kernel_bss,false)|
+    BAD_MPU->RASR = __mpu_find_size((u32)__static_stacks - (u32)__kernel_bss,false)|
         BAD_MPU_RASR_AP_PRIV_RO_UNPRIV_FAULT |
         BAD_MPU_TEXSCB_NORMAL_RW_ALLOCATE |
         BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
         BAD_MPU_RASR_XN;
+    
     __mpu_enable_with_default_map();
 }
 

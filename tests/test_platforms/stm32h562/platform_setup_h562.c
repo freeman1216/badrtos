@@ -94,7 +94,7 @@ void __platform_periodic_irq_setup( void (* periodic_func)(void))
 
 u32 __platform_get_periodic_irqn()
 {
-    return TIM6_INTR - 16; 
+    return TIM6_INTR; 
 }
 
 void tim6_usr()

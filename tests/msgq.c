@@ -6,11 +6,13 @@
 #define TASK1_PRIORITY 1 
 #define TASK2_PRIORITY 1
 
-MSGQ_DECLARE_STATIC(task1q, 16);
-
+MSGQ_DEFINE_STATIC(task1q, 16);
+MSGQ_DEFINE(task34, 16);
 static void task1(void *unused)
 {
     (void)unused;
+    
+    msgq_acquire(&task1q);
     
     volatile uint32_t sig0 = 0;
     volatile uint32_t sig1 = 0;
@@ -66,22 +68,8 @@ static void task2(void *unused)
     task_finish();
 }
 
-static const bad_task_descr_t task1_descr = {
-    .stack = task1_stack,
-    .stack_size = TASK1_STACK_SIZE,
-    .entry = task1,
-    .assigned_msgq = &task1q,
-    .ticks_to_change = 500,
-    .base_priority = TASK1_PRIORITY
-};
-
-static const bad_task_descr_t task2_descr = {
-    .stack = task2_stack,
-    .stack_size = TASK2_STACK_SIZE,
-    .entry = task2,
-    .ticks_to_change = 500,
-    .base_priority = TASK2_PRIORITY
-};
+TASK_DESCR(task1_descr,1,task1,TASK1_PRIORITY);
+TASK_DESCR(task2_descr,2,task2,TASK2_PRIORITY);
 
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,msgq) = {
     .task1_descr = &task1_descr,

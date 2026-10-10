@@ -5,7 +5,7 @@
 
 #define TASK1_PRIORITY 1
 
-static MUTEX_DECLARE(mut);
+static MUTEX_DEFINE(mut);
 
 static void task1(void *unused)
 {
@@ -26,13 +26,7 @@ static void task1(void *unused)
     task_finish();
 }
 
-static const bad_task_descr_t task1_descr = {
-    .stack = task1_stack,
-    .stack_size = TASK1_STACK_SIZE,
-    .entry = task1,
-    .ticks_to_change = 50,
-    .base_priority = TASK1_PRIORITY
-};
+TASK_DESCR(task1_descr,1,task1,TASK1_PRIORITY);
 
 BAD_ITER_SECTION_MEMBER(tests,bad_test_case_t,mutex_rec) = {
     .task1_descr = &task1_descr,

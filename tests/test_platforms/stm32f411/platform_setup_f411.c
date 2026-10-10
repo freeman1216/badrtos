@@ -90,7 +90,7 @@ void __platform_periodic_irq_setup(void (* periodic_func)(void))
 
 u32 __platform_get_periodic_irqn()
 {
-    return NVIC_TIM1_UP_TIM10_INTR - 16; 
+    return NVIC_TIM1_UP_TIM10_INTR; 
 }
 
 void tim10_usr(){

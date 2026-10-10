@@ -4,7 +4,7 @@
 #include "platform_setup.h"
 #include "runner.h"
 
-#define MEMMANAGE_IRQN (-16)
+#define MEMMANAGE_IRQN (-12)
 
 BAD_ITER_SECTION_EXTERN(tests,bad_test_case_t);
 
@@ -16,6 +16,9 @@ TASK_STATIC_STACK(task2,TASK2_STACK_SIZE);
 
 bad_task_handle_t task3h;
 TASK_STATIC_STACK(task3,TASK3_STACK_SIZE);
+
+bad_task_handle_t task4h;
+TASK_STATIC_STACK(task4,TASK4_STACK_SIZE);
 
 bad_task_handle_t runnerh;
 #define RUNNER_PRIORITY 0
@@ -29,7 +32,7 @@ TASK_STATIC_STACK(unblocker_task,UNBLOCKER_STACK_SIZE);
 
 const bad_test_case_t * volatile current_testcase = 0;
 
-SEM_DECLARE(unblock_sem,0);
+static SEM_DEFINE(unblock_sem,0);
 
 volatile u32 checkins_left;
 
@@ -143,6 +146,8 @@ void runner_task(void *unused)
             task2h = task_make(current_testcase->task2_descr);
         if(current_testcase->task3_descr)
             task3h = task_make(current_testcase->task3_descr);
+        if(current_testcase->task4_descr)
+            task4h = task_make(current_testcase->task4_descr);
         if(current_testcase->isr_test_func)
         {
             irq_clear(periodic_irqn);
@@ -156,7 +161,8 @@ void runner_task(void *unused)
         
         if(BAD_TASK_HANDLE_GET_ERROR(task1h) != BAD_RTOS_STATUS_OK ||
            BAD_TASK_HANDLE_GET_ERROR(task2h) != BAD_RTOS_STATUS_OK ||
-           BAD_TASK_HANDLE_GET_ERROR(task3h) != BAD_RTOS_STATUS_OK )
+           BAD_TASK_HANDLE_GET_ERROR(task3h) != BAD_RTOS_STATUS_OK ||
+           BAD_TASK_HANDLE_GET_ERROR(task4h) != BAD_RTOS_STATUS_OK )
         {
             bad_test_fail(__FILE__,__LINE__,"Task creation failed");
         }
@@ -201,6 +207,7 @@ void unblocker_task(void *unused)
 
 bad_rtos_status_t bad_user_init()
 {
+#ifdef BAD_RTOS_USE_MPU
     const bad_mpu_user_region_t runner_regions[] = 
     {
         {
@@ -211,6 +218,7 @@ bad_rtos_status_t bad_user_init()
         },
         {0}
     };
+#endif
     
     bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
     
@@ -218,7 +226,9 @@ bad_rtos_status_t bad_user_init()
         .stack = runner_task_stack,
         .stack_size = RUNNER_STACK_SIZE,
         .entry = runner_task,
+#ifdef BAD_RTOS_USE_MPU
         .regions = runner_regions,
+#endif
         .ticks_to_change = UINT32_MAX,
         .base_priority = RUNNER_PRIORITY,
     };

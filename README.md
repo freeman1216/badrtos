@@ -11,28 +11,30 @@ Lightweight header-only RTOS scheduler for Cortex-M4/M33 MCUs. Tested on STM32F4
 - Software timers
 - Dynamic memory allocation using a buddy allocator and pools
 - IRQ ownership API
-- Depends only on the linker file and startup code
 
 ## Repository layout
 
 | Path | Contents |
 |------|----------|
-| `for_users/` | Joined single-file header (`bad_rtos.h`), this is the one to use |
+| `for_users/` | Joined single-file headers (`badrtos_*arch*.h`), those are the one to use |
 | `examples/` | Example projects |
 | `test/` | Automated tests |
 | `run_tests.sh` | Runs the automated tests |
 
 ## Usage
 
-1. Add the header and its dependencies (linker file, startup code) to your project.
-2. In exactly one translation unit, define `BAD_RTOS_IMPLEMENTATION` before including the header:
+1. Add the header 
+2. Add the nessesary regions to your linker file (described at the top of the header)
+3. Setup the tick, set its interrupt priority to the lowest available on your MCU
+4. Setup nessesary defines in the header (isr count, flash/ram size, isr names, prio bits)
+5. In exactly one translation unit, define `BAD_RTOS_IMPLEMENTATION` before including the header:
 
 ```c
 #define BAD_RTOS_IMPLEMENTATION
 #include "bad_rtos.h"
 ```
 
-3. Create your initial tasks and objects in `bad_user_init`. Return `BAD_RTOS_STATUS_OK` to start the scheduler.
+6. Create your initial tasks and objects in `bad_user_init`. Return `BAD_RTOS_STATUS_OK` to start the scheduler.
 
 ```c
 bad_rtos_status_t bad_user_init(void){
@@ -59,7 +61,7 @@ bad_rtos_status_t bad_user_init(void){
 }
 ```
 
-4. Start the scheduler:
+7. Start the scheduler:
 
 ```c
 bad_rtos_start();

@@ -2224,6 +2224,7 @@ static u8  __attribute__((aligned(_Alignof(bad_isr_op_obj_t)))) gpool_mem[BAD_RT
 static bad_pool_t gpool; //Not initialsed to prevent isrs from generating events before the kernel has started
 
 volatile u32 preempt_count = 1;
+volatile u32 needs_resched;
 
 __attribute__((weak))
 volatile u32 uwTick;
@@ -2236,7 +2237,7 @@ u8 idle_stack[IDLE_TASK_STACK_SIZE] __attribute__((section(".static_stacks")));
 // Prototypes for asm helpers, for implementation look right above svc_c function, or grep for "ASM stuff"
 extern void idle_task(void *);
 extern void __first_task_start();
-extern void __svc_check_resched();
+extern void __svc_plock_check_resched();
 
 #ifdef BAD_RTOS_USE_SEMAPHORE
 extern bad_rtos_status_t __svc_sem_take(bad_sem_t *sem,u32 delay);
@@ -3377,20 +3378,35 @@ BAD_RTOS_STATIC void __sched_try_update()
     bad_tcb_t *running = kernel_cb.next ? kernel_cb.next : kernel_cb.curr;
     u32 top_ready_prio = __get_top_ready_prio();
     
-    if(!preempt_count && top_ready_prio < running->raised_priority)
+    if(top_ready_prio < running->raised_priority)
     {
-        __readyq_enqueue(running);
-        __sched_update(__readyq_dequeue_head());
+        if(!preempt_count)
+        {
+            __readyq_enqueue(running);
+            __sched_update(__readyq_dequeue_head());
+        }
+        else
+        {
+            needs_resched = 1;
+        }
     }
 }
 
 BAD_RTOS_STATIC void __sched_try_preempt(bad_tcb_t *tcb)
 {
     bad_tcb_t *running = kernel_cb.next ? kernel_cb.next : kernel_cb.curr;
-    if(!preempt_count && tcb->raised_priority < running->raised_priority)
+    if(tcb->raised_priority < running->raised_priority)
     {
-        __readyq_enqueue(running);
-        __sched_update(tcb);
+        if(!preempt_count)
+        {
+            __readyq_enqueue(running);
+            __sched_update(tcb);
+        }
+        else
+        {
+            __readyq_enqueue(tcb);
+            needs_resched = 1;
+        }
     }
     else
     {
@@ -3988,6 +4004,7 @@ void preempt_disable()
         __builtin_trap();
     
     preempt_count++;
+    BAD_OPT_BARRIER;
 }
 
 void preempt_enable()
@@ -3995,10 +4012,39 @@ void preempt_enable()
     if(!preempt_count || in_isr())
         __builtin_trap();
     
+    if(preempt_count == 1)
+    {
+        u32 counter = 0;
+        do
+        {
+            counter = __ldrex(&preempt_count);
+            
+            if(needs_resched)
+            {
+                __svc_plock_check_resched();
+                break;
+            }
+        }
+        while(__strex(counter - 1,&preempt_count));
+    }
+    else
+    {
+        preempt_count--;
+        BAD_OPT_BARRIER;
+    }
+    
+}
+
+BAD_RTOS_STATIC void __plock_check_resched()
+{
     preempt_count--;
     
-    if(!preempt_count)
-        __svc_check_resched();
+    if(needs_resched)
+    {
+        __readyq_enqueue(kernel_cb.curr);
+        __sched_update(__readyq_dequeue_head());
+        needs_resched = 0;
+    }
 }
 
 u32 get_ticks()
@@ -5297,12 +5343,12 @@ static void __svc_c(u8 svc, u32* stack)
             stack[0] = __task_delay_cancel(handle);
         }break;
         
-        // Always callable
-        case 0xF0:
+        case 0x28:
         {
-            __sched_try_update();
+            __plock_check_resched();
         }break;
         
+        // Always callable
 #ifdef BAD_RTOS_USE_KHEAP
         case 0xF2:
         {
@@ -5414,12 +5460,19 @@ static void __handle_systick_event(bad_systick_status_t status)
     
     u32 top_ready_prio = __get_top_ready_prio(); 
     
-    if(!preempt_count && kernel_cb.ready_bmap && 
+    if(kernel_cb.ready_bmap && 
        top_ready_prio + (status == BAD_SYSTICK_DELAY_WAKE_PENDING)
        <= kernel_cb.curr->raised_priority)
     {
-        __readyq_enqueue(kernel_cb.curr);
-        __sched_update(__readyq_dequeue_head());
+        if(!preempt_count)
+        {
+            __readyq_enqueue(kernel_cb.curr);
+            __sched_update(__readyq_dequeue_head());
+        }
+        else
+        {
+            needs_resched = 1;
+        }
     }
 }
 
@@ -5952,8 +6005,8 @@ __asm__(
 __asm__(
         ".thumb_func                    \n"
         ".global __svc_check_resched    \n"
-        "__svc_check_resched:           \n"
-        "svc 0xF0                       \n" 
+        "__svc_plock_check_resched:     \n"
+        "svc 0x28                       \n" 
         "bx lr                          \n"
         );
 

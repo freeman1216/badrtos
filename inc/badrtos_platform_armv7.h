@@ -123,12 +123,19 @@ static inline void __scb_set_core_interrupt_priority(bad_scb_core_interrupt_t in
     __dsb();
 }
 
-static inline void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms)
+static inline bad_rtos_status_t __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     BAD_SCB->CPACR &= ~(BAD_SCB_CPACR_FPU_MASK);
     BAD_SCB->CPACR |= perms << BAD_SCB_CPACR_FPU_SHIFT;
     __dsb();
     __isb();
+    
+    if(!(BAD_SCB->CPACR & BAD_SCB_CPACR_FPU_MASK))
+        ret = BAD_RTOS_STATUS_BAD_CONFIG;
+    
+    return ret;
 } 
 
 static inline void __scb_enable_fault(bad_scb_core_interrupt_t intr)
@@ -330,44 +337,55 @@ static inline u32 __mpu_find_size(u32 bytes, bool round_up)
     return (order - 1) << 1;
 }
 
-static inline void __mpu_default_init()
+static inline bad_rtos_status_t __mpu_default_init()
 {
-    //ram region
-    BAD_MPU->RNR = 0;
-    BAD_MPU->RBAR = BAD_RTOS_RAM_ADDR;
-    BAD_MPU->RASR = BAD_MPU_RASR_ENABLE |
-        __mpu_find_size(BAD_RTOS_RAM_SIZE,false) |
-        BAD_MPU_TEXSCB_NORMAL_RW_ALLOCATE |
-        BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
-        BAD_MPU_RASR_AP_PRIV_RW_UNPRIV_RW;
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK; 
     
-    //flash region
-    BAD_MPU->RNR = 5;
-    BAD_MPU->RBAR = BAD_RTOS_FLASH_RO_ADDR;
-    BAD_MPU->RASR = BAD_MPU_RASR_ENABLE |
-        __mpu_find_size(BAD_RTOS_FLASH_RO_SIZE,true) |
-        BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB |
-        BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
-        BAD_MPU_RASR_AP_PRIV_RO_UNPRIV_RO;
+    if(!BAD_MPU->TYPE)
+    {
+        ret = BAD_RTOS_STATUS_BAD_CONFIG;
+    }
+    else
+    {
+        //ram region
+        BAD_MPU->RNR = 0;
+        BAD_MPU->RBAR = BAD_RTOS_RAM_ADDR;
+        BAD_MPU->RASR = BAD_MPU_RASR_ENABLE |
+            __mpu_find_size(BAD_RTOS_RAM_SIZE,false) |
+            BAD_MPU_TEXSCB_NORMAL_RW_ALLOCATE |
+            BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
+            BAD_MPU_RASR_AP_PRIV_RW_UNPRIV_RW;
+        
+        //flash region
+        BAD_MPU->RNR = 5;
+        BAD_MPU->RBAR = BAD_RTOS_FLASH_RO_ADDR;
+        BAD_MPU->RASR = BAD_MPU_RASR_ENABLE |
+            __mpu_find_size(BAD_RTOS_FLASH_RO_SIZE,true) |
+            BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB |
+            BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
+            BAD_MPU_RASR_AP_PRIV_RO_UNPRIV_RO;
+        
+        //null adress
+        BAD_MPU->RNR = 6;
+        BAD_MPU->RBAR = BAD_RTOS_FLASH_RO_ADDR;
+        BAD_MPU->RASR = BAD_MPU_RASR_ENABLE |(0x4) << 1 |
+            BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB |
+            BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
+            BAD_MPU_RASR_AP_PRIV_FAULT_UNPRIV_FAULT;
+        
+        //kernel data structures
+        BAD_MPU->RNR = 7;
+        BAD_MPU->RBAR = BAD_RTOS_RAM_ADDR;
+        BAD_MPU->RASR = __mpu_find_size((u32)__static_stacks - (u32)__kernel_bss,false)|
+            BAD_MPU_RASR_AP_PRIV_RO_UNPRIV_FAULT |
+            BAD_MPU_TEXSCB_NORMAL_RW_ALLOCATE |
+            BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
+            BAD_MPU_RASR_XN;
+        
+        __mpu_enable_with_default_map();
+    }
     
-    //null adress
-    BAD_MPU->RNR = 6;
-    BAD_MPU->RBAR = BAD_RTOS_FLASH_RO_ADDR;
-    BAD_MPU->RASR = BAD_MPU_RASR_ENABLE |(0x4) << 1 |
-        BAD_MPU_TEXSCB_NORMAL_NO_ALLOCATE_WRB |
-        BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
-        BAD_MPU_RASR_AP_PRIV_FAULT_UNPRIV_FAULT;
-    
-    //kernel data structures
-    BAD_MPU->RNR = 7;
-    BAD_MPU->RBAR = BAD_RTOS_RAM_ADDR;
-    BAD_MPU->RASR = __mpu_find_size((u32)__static_stacks - (u32)__kernel_bss,false)|
-        BAD_MPU_RASR_AP_PRIV_RO_UNPRIV_FAULT |
-        BAD_MPU_TEXSCB_NORMAL_RW_ALLOCATE |
-        BAD_MPU_TEXSCB_NORMAL_SHAREABLE |
-        BAD_MPU_RASR_XN;
-    
-    __mpu_enable_with_default_map();
+    return ret;
 }
 
 static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const bad_task_descr_t *descr)

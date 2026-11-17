@@ -1268,7 +1268,8 @@ typedef enum
     BAD_RTOS_STATUS_FIRED,
     BAD_RTOS_STATUS_IN_USE,
     BAD_RTOS_STATUS_DEADLOCK,
-    BAD_RTOS_STATUS_NOT_RUNNING
+    BAD_RTOS_STATUS_NOT_RUNNING,
+    BAD_RTOS_STATUS_BAD_CONFIG
 } bad_rtos_status_t;
 
 typedef enum 
@@ -1515,7 +1516,7 @@ u8 task_name##_stack[(size)] __attribute__((section(".static_stacks")));
 
 //PUBLIC API**********************************************
 //Main API
-extern void bad_rtos_start();
+extern bad_rtos_status_t bad_rtos_start();
 
 #define BAD_TASK_HANDLE_IS_VALID(handle) ({ handle.idx != 0xFFFF; })
 
@@ -3599,8 +3600,10 @@ BAD_RTOS_STATIC void __idle_task_init()
 // declaration for user init function
 extern bad_rtos_status_t bad_user_init();
 
-void bad_rtos_start()
+bad_rtos_status_t bad_rtos_start()
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     __restore_basepri(1 << (8 - BAD_RTOS_PRIO_BITS));
     __kernel_sections_init();
     __tcb_queue_slab_init();
@@ -3611,20 +3614,27 @@ void bad_rtos_start()
 #ifdef BAD_RTOS_USE_KHEAP
     __buddy_init(&kernel_buddy, kheap, kfreelist, KMIN_ORDER, KMAX_ORDER, kbitmap);
 #endif
-#ifdef BAD_RTOS_USE_MPU
-    __mpu_default_init();
-#endif
-#ifdef BAD_RTOS_USE_FPU 
-    __scb_set_fpu_permission_level(BAD_SCB_FPU_FULL_ACCESS);
+#ifdef BAD_RTOS_USE_FPU
+    if(ret == BAD_RTOS_STATUS_OK)
+        ret = __scb_set_fpu_permission_level(BAD_SCB_FPU_FULL_ACCESS);
 #endif
 #if defined(BAD_RTOS_USE_FPU) && defined(BAD_RTOS_FPU_DEFAULT_SETTINGS)
-    __fpu_init(BAD_RTOS_FPU_SETTINGS);
+    if(ret == BAD_RTOS_STATUS_OK)
+        __fpu_init(BAD_RTOS_FPU_SETTINGS);
 #endif
+#ifdef BAD_RTOS_USE_MPU
+    if(ret == BAD_RTOS_STATUS_OK)
+        ret = __mpu_default_init();
+#endif
+    if(ret == BAD_RTOS_STATUS_OK)
+        ret = bad_user_init();
     
-    if(bad_user_init() == BAD_RTOS_STATUS_OK)
+    if(ret == BAD_RTOS_STATUS_OK)
         __first_task_start();
     else
         __restore_basepri(0);
+    
+    return ret;
 }
 
 //Synchro helpers

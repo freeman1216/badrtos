@@ -158,12 +158,19 @@ static inline void __scb_set_core_interrupt_priority(bad_scb_core_interrupt_t in
     __dsb();
 }
 
-static inline void __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms)
+static inline bad_rtos_status_t __scb_set_fpu_permission_level(bad_scb_fpu_permission_t perms)
 {
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK;
+    
     BAD_SCB->CPACR &= ~(BAD_SCB_CPACR_FPU_MASK);
     BAD_SCB->CPACR |= perms << BAD_SCB_CPACR_FPU_SHIFT;
     __dsb();
     __isb();
+    
+    if(!(BAD_SCB->CPACR & BAD_SCB_CPACR_FPU_MASK))
+        ret = BAD_RTOS_STATUS_BAD_CONFIG;
+    
+    return ret; 
 } 
 
 static inline void __scb_enable_fault(bad_scb_core_interrupt_t intr)
@@ -421,32 +428,43 @@ BAD_MPU_MAIR_SET_REGION(BAD_MPU_MAIR_NORMAL_SETTING(\
 BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RA_WA,\
 BAD_MPU_MAIR_NORMAL_WT_TRANSIENT_RA_WA), BAD_RTOS_NORMAL_TR_CACHEABLE_WT_MAIR_IDX - 4)
 
-static inline void __mpu_default_init()
+static inline bad_rtos_status_t __mpu_default_init()
 {
-    BAD_MPU->MAIR[0] = BAD_RTOS_MAIR0_SETTINGS;
-    BAD_MPU->MAIR[1] = BAD_RTOS_MAIR1_SETTINGS;
+    bad_rtos_status_t ret = BAD_RTOS_STATUS_OK; 
     
-    // 0x0, force a fault through overlapping regions lol
-    BAD_MPU->RNR = 4;
-    BAD_MPU->RBAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
-    BAD_MPU->RLAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
+    if(!BAD_MPU->TYPE)
+    {
+        ret = BAD_RTOS_STATUS_BAD_CONFIG;
+    }
+    else
+    {
+        BAD_MPU->MAIR[0] = BAD_RTOS_MAIR0_SETTINGS;
+        BAD_MPU->MAIR[1] = BAD_RTOS_MAIR1_SETTINGS;
+        
+        // 0x0, force a fault through overlapping regions lol
+        BAD_MPU->RNR = 4;
+        BAD_MPU->RBAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
+        BAD_MPU->RLAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
+        
+        //global data
+        BAD_MPU->RNR = 5;
+        BAD_MPU->RBAR = (u32)(__heap) | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
+        BAD_MPU->RLAR = ((u32)(__dma_buffs) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NON_CACHEABLE);
+        
+        //flash region
+        BAD_MPU->RNR = 6;
+        BAD_MPU->RBAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
+        BAD_MPU->RLAR = (BAD_RTOS_FLASH_RO_ADDR + BAD_RTOS_FLASH_RO_SIZE - 32) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
+        
+        //kernel data 
+        BAD_MPU->RNR = 7;
+        BAD_MPU->RBAR = (u32)(__kernel_bss) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
+        BAD_MPU->RLAR = ((u32)(__ekernel_bss) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
+        
+        __mpu_enable_with_default_map();
+    }
     
-    //global data
-    BAD_MPU->RNR = 5;
-    BAD_MPU->RBAR = (u32)(__heap) | BAD_MPU_RBAR_AP_PRIV_RW_UNPRIV_RW;
-    BAD_MPU->RLAR = ((u32)(__dma_buffs) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NON_CACHEABLE);
-    
-    //flash region
-    BAD_MPU->RNR = 6;
-    BAD_MPU->RBAR = (BAD_RTOS_FLASH_RO_ADDR) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_RO;
-    BAD_MPU->RLAR = (BAD_RTOS_FLASH_RO_ADDR + BAD_RTOS_FLASH_RO_SIZE - 32) | BAD_MPU_RLAR_EN| BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
-    
-    //kernel data 
-    BAD_MPU->RNR = 7;
-    BAD_MPU->RBAR = (u32)(__kernel_bss) | BAD_MPU_RBAR_AP_PRIV_RO_UNPRIV_FAULT;
-    BAD_MPU->RLAR = ((u32)(__ekernel_bss) - 32) | BAD_MPU_RLAR_EN | BAD_MPU_RLAR_SET_MAIR_IDX(BAD_RTOS_NORMAL_NT_CACHEABLE_WB_MAIR_IDX);
-    
-    __mpu_enable_with_default_map();
+    return ret;
 }
 
 static inline bad_rtos_status_t __mpu_translate_settings(bad_tcb_t *tcb, const bad_task_descr_t *descr)
